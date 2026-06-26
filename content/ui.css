@@ -1,0 +1,642 @@
+/* PoE2 工具箱 —— 统一侧边栏 / toast / 对话框样式 */
+:root {
+    --tb-w: 360px;
+    --tb-bg: #16161c;
+    --tb-bg2: #1d1d26;
+    --tb-line: #2c2c38;
+    --tb-gold: #c9aa71;
+    --tb-gold-bright: #e8c987;
+    --tb-text: #e8e3d6;
+    --tb-text-dim: #9a958a;
+    --tb-accent: #d4af37;
+    --tb-danger: #e05a5a;
+}
+
+/* 给页面让出空间 */
+body.tb-active {
+    margin-right: var(--tb-w);
+    transition: margin-right .25s ease;
+}
+
+body.tb-active.tb-collapsed {
+    margin-right: 0;
+}
+
+/* ── 侧边栏 ─────────────────────────────────────────── */
+#tb-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: var(--tb-w);
+    height: 100vh;
+    background: var(--tb-bg);
+    border-left: 1px solid var(--tb-line);
+    box-shadow: -8px 0 28px rgba(0, 0, 0, .45);
+    z-index: 2147483000;
+    display: flex;
+    flex-direction: column;
+    color: var(--tb-text);
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 13px;
+    transition: transform .25s ease;
+}
+
+#tb-panel.collapsed {
+    transform: translateX(100%);
+}
+
+#tb-toggle {
+    position: fixed;
+    top: 12px;
+    right: var(--tb-w);
+    width: 26px;
+    height: 44px;
+    background: var(--tb-bg2);
+    border: 1px solid var(--tb-line);
+    border-right: none;
+    border-radius: 8px 0 0 8px;
+    color: var(--tb-gold);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 13px;
+    z-index: 2147483001;
+    transition: right .25s ease, color .15s ease, background .15s ease;
+}
+
+#tb-toggle:hover {
+    color: var(--tb-gold-bright);
+    background: #25252f;
+}
+
+#tb-panel.collapsed+#tb-toggle {
+    right: 0;
+}
+
+/* ── 头部 ──────────────────────────────────────────── */
+.tb-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--tb-line);
+    background: linear-gradient(180deg, var(--tb-bg2), var(--tb-bg));
+}
+
+.tb-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    letter-spacing: .5px;
+    color: var(--tb-gold-bright);
+}
+
+.tb-logo {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--tb-gold-bright), var(--tb-gold));
+    color: #1a1a1a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+}
+
+.tb-header-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.tb-icon-btn {
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--tb-line);
+    border-radius: 6px;
+    background: var(--tb-bg2);
+    color: var(--tb-text-dim);
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all .15s ease;
+}
+
+.tb-icon-btn:hover {
+    color: var(--tb-gold-bright);
+    border-color: var(--tb-gold);
+}
+
+/* ── 标签页 ────────────────────────────────────────── */
+.tb-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--tb-line);
+    background: var(--tb-bg);
+}
+
+.tb-tab-btn {
+    flex: 1;
+    padding: 10px 8px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--tb-text-dim);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all .15s ease;
+}
+
+.tb-tab-btn:hover {
+    color: var(--tb-text);
+}
+
+.tb-tab-btn.active {
+    color: var(--tb-gold-bright);
+    border-bottom-color: var(--tb-gold);
+}
+
+.tb-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.tb-tab-panel {
+    display: none;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    flex-direction: column;
+}
+
+.tb-tab-panel.active {
+    display: flex;
+}
+
+/* ── 通用列表 / 空状态 ─────────────────────────────── */
+.tb-empty,
+.tb-loading {
+    text-align: center;
+    padding: 28px 16px;
+    color: var(--tb-text-dim);
+    font-style: italic;
+}
+
+.tb-stats {
+    padding: 6px 14px;
+    font-size: 11px;
+    color: var(--tb-text-dim);
+    border-bottom: 1px solid var(--tb-line);
+}
+
+/* ── 通用按钮 ──────────────────────────────────────── */
+.tb-btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--tb-line);
+    cursor: pointer;
+    font-size: 13px;
+    transition: all .15s ease;
+    background: var(--tb-bg2);
+    color: var(--tb-text);
+}
+
+.tb-btn-primary {
+    background: linear-gradient(135deg, var(--tb-gold), var(--tb-gold-bright));
+    border-color: var(--tb-gold);
+    color: #1a1a1a;
+    font-weight: 600;
+}
+
+.tb-btn-primary:hover {
+    filter: brightness(1.08);
+}
+
+.tb-btn-secondary:hover {
+    border-color: var(--tb-text-dim);
+}
+
+.tb-action-btn {
+    flex: 1;
+    min-width: 100px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--tb-line);
+    background: var(--tb-bg2);
+    color: var(--tb-text);
+    cursor: pointer;
+    font-size: 12px;
+    transition: all .15s ease;
+}
+
+.tb-action-btn:hover {
+    border-color: var(--tb-gold);
+    color: var(--tb-gold-bright);
+}
+
+/* ── Toast ─────────────────────────────────────────── */
+.tb-toast {
+    position: fixed;
+    top: 18px;
+    right: calc(var(--tb-w) + 14px);
+    max-width: 300px;
+    padding: 11px 14px;
+    border-radius: 8px;
+    background: var(--tb-bg2);
+    border: 1px solid var(--tb-line);
+    color: var(--tb-text);
+    font-size: 13px;
+    z-index: 2147483600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, .4);
+    transform: translateX(120%);
+    opacity: 0;
+    transition: all .3s ease;
+}
+
+.tb-toast.show {
+    transform: translateX(0);
+    opacity: 1;
+}
+
+.tb-toast-success {
+    border-color: #4a7a4a;
+}
+
+.tb-toast-warning {
+    border-color: #b5862f;
+}
+
+.tb-toast-error {
+    border-color: var(--tb-danger);
+}
+
+.tb-toast-icon {
+    font-size: 15px;
+}
+
+/* ── 对话框 ────────────────────────────────────────── */
+.tb-dialog-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .6);
+    z-index: 2147483600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tb-dialog {
+    width: 400px;
+    max-width: 92vw;
+    background: var(--tb-bg);
+    border: 1px solid var(--tb-line);
+    border-radius: 10px;
+    color: var(--tb-text);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, .5);
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 13px;
+}
+
+.tb-dialog-header {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--tb-line);
+}
+
+.tb-dialog-header h3 {
+    margin: 0;
+    font-size: 15px;
+    color: var(--tb-gold-bright);
+    text-align: center;
+    font-weight: 600;
+}
+
+.tb-dialog-body {
+    padding: 18px;
+}
+
+.tb-dialog-msg {
+    margin: 0;
+    line-height: 1.6;
+    color: var(--tb-text);
+}
+
+.tb-dialog-label {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--tb-text-dim);
+}
+
+.tb-dialog-input,
+.tb-dialog textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--tb-line);
+    background: var(--tb-bg2);
+    color: var(--tb-text);
+    font-size: 13px;
+    box-sizing: border-box;
+}
+
+.tb-dialog-input:focus,
+.tb-dialog textarea:focus {
+    outline: none;
+    border-color: var(--tb-gold);
+}
+
+.tb-dialog-footer {
+    padding: 14px 18px;
+    border-top: 1px solid var(--tb-line);
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* ── 列表项（历史 / 收藏共用）────────────────────────── */
+.tb-list {
+    padding: 6px;
+}
+
+.tb-list-item {
+    position: relative;
+    padding: 10px 12px;
+    margin: 4px 2px;
+    border-radius: 8px;
+    border-left: 2px solid transparent;
+    background: var(--tb-bg2);
+    cursor: pointer;
+    transition: all .15s ease;
+}
+
+.tb-list-item:hover {
+    background: #25252f;
+    border-left-color: var(--tb-gold);
+}
+
+.tb-item-title {
+    font-weight: 600;
+    color: var(--tb-gold-bright);
+    font-size: 13px;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-right: 18px;
+}
+
+.tb-item-sub {
+    font-size: 11px;
+    color: var(--tb-text-dim);
+    margin-bottom: 4px;
+}
+
+.tb-item-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.tb-tag {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    background: rgba(201, 170, 113, .15);
+    color: var(--tb-gold);
+    border: 1px solid rgba(201, 170, 113, .3);
+}
+
+.tb-item-del {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(224, 90, 90, .2);
+    color: var(--tb-danger);
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    font-size: 12px;
+}
+
+.tb-list-item:hover .tb-item-del {
+    display: flex;
+}
+
+.tb-item-del:hover {
+    background: var(--tb-danger);
+    color: #fff;
+}
+
+/* ── 收藏：工具栏 / 文件夹 ──────────────────────────── */
+.tb-fav-toolbar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 12px;
+    border-bottom: 1px solid var(--tb-line);
+}
+
+.tb-folder {
+    margin: 8px 6px;
+    border: 1px solid var(--tb-line);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.tb-folder-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: var(--tb-bg2);
+    cursor: pointer;
+}
+
+.tb-folder-header:hover {
+    background: #25252f;
+}
+
+.tb-folder-title {
+    flex: 1;
+    font-weight: 600;
+    color: var(--tb-gold-bright);
+    cursor: pointer;
+}
+
+.tb-folder-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity .15s ease;
+}
+
+.tb-folder:hover .tb-folder-actions {
+    opacity: 1;
+}
+
+.tb-folder-actions button {
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 5px;
+    background: var(--tb-bg);
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.tb-folder-actions button:hover {
+    background: var(--tb-line);
+}
+
+.tb-folder-toggle {
+    color: var(--tb-text-dim);
+    cursor: pointer;
+    transition: transform .15s ease;
+    margin-left: 2px;
+}
+
+.tb-folder.collapsed .tb-folder-toggle {
+    transform: rotate(-90deg);
+}
+
+.tb-folder-content {
+    padding: 8px;
+}
+
+.tb-folder.collapsed .tb-folder-content {
+    display: none;
+}
+
+.tb-folder-content.drag-over {
+    background: rgba(201, 170, 113, .12);
+    outline: 2px dashed var(--tb-gold);
+    outline-offset: -4px;
+    border-radius: 6px;
+}
+
+.tb-folder-toolbar {
+    margin-bottom: 8px;
+}
+
+.tb-folder-add {
+    width: 100%;
+    padding: 7px;
+    border: 1px solid var(--tb-line);
+    border-radius: 6px;
+    background: var(--tb-bg2);
+    color: var(--tb-gold);
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.tb-folder-add:hover {
+    border-color: var(--tb-gold);
+    color: var(--tb-gold-bright);
+}
+
+.tb-root-favs {
+    padding: 6px;
+}
+
+.tb-fav-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    margin: 4px 0;
+    border-radius: 6px;
+    background: var(--tb-bg2);
+    border: 1px solid transparent;
+    transition: all .15s ease;
+}
+
+.tb-fav-item:hover {
+    border-color: var(--tb-line);
+    background: #25252f;
+}
+
+.tb-fav-item.draggable {
+    cursor: move;
+}
+
+.tb-fav-item.dragging {
+    opacity: .5;
+}
+
+.tb-fav-main {
+    flex: 1;
+    cursor: pointer;
+    min-width: 0;
+}
+
+.tb-fav-title {
+    font-weight: 600;
+    color: var(--tb-gold-bright);
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tb-fav-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity .15s ease;
+}
+
+.tb-fav-item:hover .tb-fav-actions {
+    opacity: 1;
+}
+
+.tb-fav-actions button {
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 5px;
+    background: var(--tb-bg);
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.tb-fav-actions button:hover {
+    background: var(--tb-line);
+}
+
+/* ── 滚动条 ────────────────────────────────────────── */
+.tb-tab-panel::-webkit-scrollbar {
+    width: 6px;
+}
+
+.tb-tab-panel::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.tb-tab-panel::-webkit-scrollbar-thumb {
+    background: var(--tb-line);
+    border-radius: 3px;
+}
+
+.tb-tab-panel::-webkit-scrollbar-thumb:hover {
+    background: var(--tb-gold);
+}
+
+@media (max-width: 1200px) {
+    :root {
+        --tb-w: 320px;
+    }
+}

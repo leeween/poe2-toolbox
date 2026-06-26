@@ -1,0 +1,67 @@
+{
+    "manifest_version": 3,
+    "name": "PoE2 工具箱",
+    "version": "0.1.0",
+    "description": "流放之路2 集市工具箱：搜索历史、收藏管理、复制PoB、查看词缀。统一侧边栏，功能可逐项开关。",
+    "permissions": [
+        "storage",
+        "activeTab",
+        "alarms",
+        "unlimitedStorage"
+    ],
+    "host_permissions": [
+        "https://poe2db.tw/*",
+        "https://ninja.710421059.xyz/*"
+    ],
+    "background": {
+        "service_worker": "background/service-worker.js"
+    },
+    "options_ui": {
+        "page": "options/options.html",
+        "open_in_tab": true
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "https://poe.game.qq.com/trade*",
+                "https://poe.game.qq.com/trade2*",
+                "https://www.pathofexile.com/trade2*"
+            ],
+            "js": [
+                "content/ctx.js",
+                "content/features/history.js",
+                "content/features/favorites.js",
+                "content/features/pob-copy.js",
+                "content/features/view-mods.js",
+                "content/shell.js"
+            ],
+            "css": [
+                "content/ui.css"
+            ],
+            "run_at": "document_idle"
+        },
+        {
+            "matches": [
+                "https://poe.game.qq.com/trade2*"
+            ],
+            "js": [
+                "content/pob-netcapture.main.js"
+            ],
+            "run_at": "document_start",
+            "world": "MAIN"
+        }
+    ],
+    "action": {
+        "default_title": "PoE2 工具箱",
+        "default_icon": {
+            "16": "icons/icon16.png",
+            "48": "icons/icon48.png",
+            "128": "icons/icon128.png"
+        }
+    },
+    "icons": {
+        "16": "icons/icon16.png",
+        "48": "icons/icon48.png",
+        "128": "icons/icon128.png"
+    }
+}
