@@ -13,7 +13,8 @@ importScripts(
     '../lib/dict-build.js',
     'storage.js',
     'favorites.js',
-    'dict.js'
+    'dict.js',
+    'poe2db.js'
 );
 
 // ── 内置处理：打开设置页 ───────────────────────────────────────────

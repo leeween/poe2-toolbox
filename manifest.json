@@ -42,7 +42,8 @@
         },
         {
             "matches": [
-                "https://poe.game.qq.com/trade2*"
+                "https://poe.game.qq.com/trade2*",
+                "https://www.pathofexile.com/trade2*"
             ],
             "js": [
                 "content/pob-netcapture.main.js"

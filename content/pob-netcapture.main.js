@@ -1,13 +1,25 @@
-// PoE2 工具箱 —— PoB 网络捕获（MAIN 世界，document_start）
-// 唯一职责：劫持页面 window.fetch / XMLHttpRequest，捕获 /api/trade2/fetch/ 返回的物品 JSON，
-// 通过 window.postMessage 转发给隔离世界的 pob-copy.js（隔离世界拿不到页面的 fetch，故必须在此）。
+// PoE2 工具箱 —— 页面网络捕获（MAIN 世界，document_start）
+// 隔离世界拿不到页面的 fetch/XHR，所以在此劫持，捕获两类数据并 postMessage 转发：
+//   1) /api/trade2/fetch/ 的响应 -> 物品 JSON（供「复制PoB」）
+//   2) /api/trade2/search   的请求体 -> 选中的物品类别 id（供「查看词缀」类型识别兜底）
 (function () {
     'use strict';
-    const PATTERN = /\/api\/trade2\/fetch\//;
+    const FETCH_PATTERN = /\/api\/trade2\/fetch\//;
+    const SEARCH_PATTERN = /\/api\/trade2\/search/;
 
-    function forward(json) {
+    function post(msg) {
+        try { window.postMessage(msg, '*'); } catch (e) { /* ignore */ }
+    }
+    function forwardItems(json) { post({ __poe2tb_pob: true, payload: json }); }
+
+    // 从 search 请求体里读类别 id
+    function grabSearchCategory(body) {
         try {
-            window.postMessage({ __poe2tb_pob: true, payload: json }, '*');
+            const j = typeof body === 'string' ? JSON.parse(body) : body;
+            const opt = j && j.query && j.query.filters && j.query.filters.type_filters &&
+                j.query.filters.type_filters.filters && j.query.filters.type_filters.filters.category &&
+                j.query.filters.type_filters.filters.category.option;
+            if (opt) post({ __poe2tb_search: true, category: opt });
         } catch (e) { /* ignore */ }
     }
 
@@ -15,14 +27,17 @@
     const origFetch = window.fetch;
     if (typeof origFetch === 'function') {
         window.fetch = function (...args) {
-            const p = origFetch.apply(this, args);
             try {
                 const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || '';
-                if (PATTERN.test(url)) {
-                    p.then((res) => { res.clone().json().then(forward).catch(() => { }); }).catch(() => { });
+                if (SEARCH_PATTERN.test(url) && args[1] && args[1].body) grabSearchCategory(args[1].body);
+                const p = origFetch.apply(this, args);
+                if (FETCH_PATTERN.test(url)) {
+                    p.then((res) => { res.clone().json().then(forwardItems).catch(() => { }); }).catch(() => { });
                 }
-            } catch (e) { /* ignore */ }
-            return p;
+                return p;
+            } catch (e) {
+                return origFetch.apply(this, args);
+            }
         };
     }
 
@@ -32,14 +47,16 @@
         const origOpen = XHR.prototype.open;
         const origSend = XHR.prototype.send;
         XHR.prototype.open = function (method, url, ...rest) {
-            this.__pobUrl = url;
+            this.__tbUrl = url;
             return origOpen.call(this, method, url, ...rest);
         };
         XHR.prototype.send = function (...sendArgs) {
             try {
-                if (this.__pobUrl && PATTERN.test(this.__pobUrl)) {
+                const url = this.__tbUrl || '';
+                if (SEARCH_PATTERN.test(url) && sendArgs[0]) grabSearchCategory(sendArgs[0]);
+                if (FETCH_PATTERN.test(url)) {
                     this.addEventListener('load', () => {
-                        try { forward(JSON.parse(this.responseText)); } catch (e) { /* ignore */ }
+                        try { forwardItems(JSON.parse(this.responseText)); } catch (e) { /* ignore */ }
                     });
                 }
             } catch (e) { /* ignore */ }
