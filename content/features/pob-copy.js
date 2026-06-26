@@ -12,7 +12,7 @@
         buttonBottom: '40px',
         debug: false,
     };
-    const SENT = ''; // 与建表脚本一致的数字占位哨兵 (\x01)
+    const SENT = String.fromCharCode(1); // 与建表脚本一致的数字占位哨兵
     const log = (...a) => CONFIG.debug && console.log('%c[PoB]', 'color:#c8a165', ...a);
     const warn = (...a) => console.warn('[PoB]', ...a);
 
