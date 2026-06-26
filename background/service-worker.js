@@ -7,7 +7,14 @@ self.TB = {
 };
 
 // 后台模块（按阶段逐步引入）
-importScripts('../lib/lz-string.js', 'storage.js', 'favorites.js');
+importScripts(
+    '../lib/lz-string.js',
+    '../lib/dict-normalize.js',
+    '../lib/dict-build.js',
+    'storage.js',
+    'favorites.js',
+    'dict.js'
+);
 
 // ── 内置处理：打开设置页 ───────────────────────────────────────────
 TB.on('OPEN_OPTIONS', () => { chrome.runtime.openOptionsPage(); return {}; });
