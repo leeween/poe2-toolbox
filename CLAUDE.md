@@ -5,8 +5,8 @@
 ## 这个项目是什么
 
 流放之路2 集市增强的 **Chrome MV3 插件**，统一侧边栏、功能可逐项开关。它把原先分散的三处整合成一个工具箱：
-- 旧插件 `~/Documents/code/project/poe2-trading-tencent/`（搜索历史 + 收藏/文件夹/导入导出）—— 已 1:1 迁移。
-- 油猴脚本 `~/Documents/vibe-work/scripts/poe2/` 的 **复制PoB**（含原 4.9MB 词典）和 **查看词缀**（poe2db）—— 已并入。
+- 旧插件 `poe2-trading-tencent`（搜索历史 + 收藏/文件夹/导入导出）—— 已 1:1 迁移。
+- 油猴脚本 `scripts/poe2`（同一工作区）的 **复制PoB**（含原 4.9MB 词典）和 **查看词缀**（poe2db）—— 已并入。
 
 > 这两个来源是**只读参考**，不要改它们。本仓库是迁移后的唯一维护点。
 > 暴击检查（`poe2-crit-craft-check.user.js`）本期未迁。
@@ -87,7 +87,7 @@ PoE2TB.register({
   ```
   node tools/verify-dict.mjs
   ```
-  它用 JS 建表 vs 旧 `scripts/poe2/poe2-pob-dict.user.js` 逐键 diff，**目标 0 偏差**。缺省路径指向 `~/Documents/vibe-work/scripts/poe2/`。
+  它用 JS 建表 vs 旧 `scripts/poe2/poe2-pob-dict.user.js` 逐键 diff，**目标 0 偏差**。参考文件路径用命令行参数或环境变量 `POE2_REF_DIR` 指定（缺省指向同一工作区的 `scripts/poe2`）。
 - 哨兵用 `String.fromCharCode(1)`（U+0001），勿写成字面控制字符或空串。
 
 ## 真机待调点（调不通先看这里）

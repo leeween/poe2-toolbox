@@ -4,14 +4,14 @@
 //
 // 用法：
 //   node tools/verify-dict.mjs [lang-sc.json 路径] [poe2-pob-dict.user.js 路径]
-// 缺省路径指向 ~/Documents/vibe-work/scripts/poe2/ 下的两份参考文件。
+// 不带参数时，从环境变量 POE2_REF_DIR 或同一工作区的 scripts/poe2 取两份参考文件。
 import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
-const refBase = path.resolve(dir, '../../../../vibe-work/scripts/poe2');
+const refBase = process.env.POE2_REF_DIR || path.resolve(dir, '../../../../vibe-work/scripts/poe2');
 const SRC = process.argv[2] || path.join(refBase, 'poe2-lang-sc.json');
 const REF = process.argv[3] || path.join(refBase, 'poe2-pob-dict.user.js');
 
