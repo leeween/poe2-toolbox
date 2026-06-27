@@ -87,12 +87,19 @@
     function normKey(s) {
         return s.replace(KEY_TOKEN_RE, SENT).replace(/\s+/g, ' ').trim().toLowerCase();
     }
+    // 词汇等价：集市 API 物品词缀用「X上限」(生命上限/能量护盾上限/魔力上限…)，
+    // 而建表原料 lang-sc.json 对应词条用「最大X」。两边是同一英文概念的不同中译，
+    // 补一个等价候选以命中字典（仅作额外候选，原措辞仍优先，错配只会查不到、不误翻）。
+    function synonymVariant(s) {
+        return s.replace(/([一-鿿]{1,8})上限/g, '最大$1');
+    }
     function candidateKeys(oneLine) {
         const variants = [];
         const push = (v) => { if (v && variants.indexOf(v) < 0) variants.push(v); };
         push(oneLine);
         push(oneLine.replace(/基础/g, '').replace(/^(该装备|本地)\s*/, ''));
         for (const v of variants.slice()) push(v.replace(/^[一-龥A-Za-z]{1,8}[：:]\s*/, ''));
+        for (const v of variants.slice()) push(synonymVariant(v)); // 上限 -> 最大（放最后）
         return variants.map(normKey);
     }
     function fillTemplate(tpl, values) {
@@ -115,12 +122,38 @@
         }
         return null;
     }
+    // 词缀条目可能是字符串，也可能是对象（部分接口把词缀包成 {text/str/...: "中文词缀"}）。
+    // 统一提取出可翻译的中文文本，避免 String(obj) 直接变成 "[object Object]"。
+    let _warnedModObj = false;
+    function modText(raw) {
+        if (raw == null) return '';
+        if (typeof raw === 'string') return raw;
+        if (typeof raw !== 'object') return String(raw);
+        // 常见承载完整词缀文本的字段（按可能性排序）：
+        // 国服 trade2 把词缀包成 { description: 中文文本, hash: stat id, flags, mods:[...] }，
+        // description 即整行文本；name(在 mods[].name) 是词条名而非整行，故不优先。
+        for (const k of ['description', 'text', 'str', 'line', 'mod', 'display', 'displayText', 'content', 'value']) {
+            if (typeof raw[k] === 'string' && raw[k].trim()) return raw[k];
+        }
+        // 未识别结构：打一次完整 JSON 供修正字段映射；同时兜底取一个像词缀文本的字符串属性
+        if (!_warnedModObj) {
+            _warnedModObj = true;
+            warn('词缀是对象但未识别文本字段，请把此结构发给开发者修正：', JSON.stringify(raw));
+        }
+        for (const k of Object.keys(raw)) {
+            const v = raw[k];
+            if (typeof v === 'string' && v.trim().length > 1 && /[0-9一-鿿]/.test(v)) return v;
+        }
+        return '';
+    }
     function translateMods(arr, suffix) {
         if (!Array.isArray(arr)) return [];
         const out = [];
         for (const raw of arr) {
-            const en = translateLine(raw);
-            const line = en != null ? en : `${String(raw).replace(/[\r\n]+/g, ' ')}  「未翻译」`;
+            const text = modText(raw);
+            if (!text) continue; // 对象提取不到文本：跳过，不再输出 [object Object]
+            const en = translateLine(text);
+            const line = en != null ? en : `${text.replace(/[\r\n]+/g, ' ')}  「未翻译」`;
             for (const seg of line.split('\n')) out.push(suffix ? `${seg} ${suffix}` : seg);
         }
         return out;
@@ -221,7 +254,9 @@
         return { sel: null, nodes: [] };
     }
 
-    function resolveItemForRow(row, visibleIndex) {
+    // 仅按 id 命中真实物品（行 / 祖先 / 带 id 的后代）；命中不到返回 null，不做顺序兜底。
+    // 用它来判定「这一行是不是真正的结果行」，避免给搜索/过滤区误匹配的 .row 加按钮。
+    function resolveByScan(row) {
         const scan = (el) => {
             if (!el || !el.attributes) return null;
             for (const attr of el.attributes) {
@@ -233,10 +268,15 @@
         let hit = scan(row);
         if (hit) return hit;
         let p = row.parentElement, depth = 0;
-        while (p && depth < 4 && !hit) { hit = scan(p); p = p.parentElement; depth++; }
-        if (hit) return hit;
+        while (p && depth < 4) { hit = scan(p); if (hit) return hit; p = p.parentElement; depth++; }
         const withId = row.querySelector('[data-id],[data-itemid],[id]');
         if (withId) { hit = scan(withId); if (hit) return hit; }
+        return null;
+    }
+
+    function resolveItemForRow(row, visibleIndex) {
+        const hit = resolveByScan(row);
+        if (hit) return hit;
         if (orderedItems[visibleIndex]) { log('行', visibleIndex, '用顺序兜底匹配物品'); return orderedItems[visibleIndex]; }
         return null;
     }
@@ -282,6 +322,9 @@
         log('用选择器', JSON.stringify(sel), '匹配到', nodes.length, '个结果行；词典', dict() ? '已就绪' : '未就绪');
         nodes.forEach((row, idx) => {
             if (row.querySelector(':scope > .tb-pob-btn') || row.__tbPobDone) return;
+            // 只给能 id 命中真实物品的行加按钮：滤掉搜索/过滤区误匹配的 .row。
+            // 不标记 __tbPobDone，等物品 JSON 到达后重扫时真实行还能补上。
+            if (!resolveByScan(row)) return;
             row.__tbPobDone = true;
             const btn = makeButton();
             btn.dataset.label = '复制PoB';
