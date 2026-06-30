@@ -364,7 +364,7 @@
     ctx.register({
         id: 'pob',
         label: '复制PoB',
-        scope: (c) => c.isQQ && c.version === 'poe2',
+        scope: (c) => c.isQQ || c.isIntl,
         panel: false,
         init,
     });

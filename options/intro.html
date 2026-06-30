@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <title>PoE2 工具箱 · 功能介绍</title>
+    <style>
+        :root {
+            --bg: #16161c;
+            --bg2: #1d1d26;
+            --line: #2c2c38;
+            --gold: #c9aa71;
+            --gold2: #e8c987;
+            --text: #e8e3d6;
+            --dim: #9a958a;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            font-size: 14px;
+            line-height: 1.7;
+        }
+
+        .wrap {
+            max-width: 760px;
+            margin: 0 auto;
+            padding: 32px 24px 64px;
+        }
+
+        h1 {
+            font-size: 22px;
+            color: var(--gold2);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 0 0 8px;
+        }
+
+        .logo {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: radial-gradient(circle, var(--gold2), var(--gold));
+            color: #1a1a1a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        .subtitle {
+            color: var(--dim);
+            font-size: 13px;
+            margin: 0 0 24px;
+        }
+
+        section {
+            background: var(--bg2);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 20px 22px;
+            margin-bottom: 16px;
+        }
+
+        h2 {
+            font-size: 16px;
+            margin: 0 0 12px;
+            color: var(--gold2);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        h2 .icon {
+            display: inline-flex;
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            background: rgba(201, 170, 113, .15);
+            color: var(--gold);
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        h2 .badge {
+            font-size: 11px;
+            color: var(--dim);
+            font-weight: normal;
+            margin-left: 4px;
+        }
+
+        p { margin: 8px 0; color: var(--text); }
+
+        ul {
+            margin: 8px 0;
+            padding-left: 20px;
+        }
+
+        li { margin: 4px 0; color: var(--text); }
+
+        .tag {
+            display: inline-block;
+            padding: 1px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            background: rgba(201, 170, 113, .15);
+            color: var(--gold);
+            border: 1px solid rgba(201, 170, 113, .3);
+            margin-right: 6px;
+        }
+
+        .tip {
+            background: rgba(201, 170, 113, .08);
+            border-left: 3px solid var(--gold);
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: var(--text);
+            margin: 10px 0;
+        }
+
+        .tip strong { color: var(--gold2); }
+
+        a { color: var(--gold); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        .hint {
+            color: var(--dim);
+            font-size: 12px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrap">
+        <h1><span class="logo">⚖</span>PoE2 工具箱 · 功能介绍</h1>
+        <p class="subtitle">流放之路2 集市增强的 Chrome 扩展，统一侧边栏，功能可逐项开关。国服 / 国际服数据相互隔离。</p>
+
+        <section>
+            <h2><span class="icon">🔍</span>搜索历史 <span class="badge">侧边栏 tab · 国服+国际服</span></h2>
+            <p>自动捕获你在集市里发起的每一次搜索，按时间倒序列表展示，最多保留 100 条、30 天。</p>
+            <ul>
+                <li>点击任意一条直接跳回当时的搜索结果页。</li>
+                <li>鼠标悬停时右侧出现 ×，可单条删除；标题栏「清空」按钮可一键清空。</li>
+                <li>展示联盟、搜索 ID 等关键参数标签，便于快速辨认。</li>
+            </ul>
+            <div class="tip"><strong>触发时机：</strong>页面 URL 变化、提交表单、点击「搜索 / Search」按钮、首次进入页面时各记录一次。</div>
+            <p class="hint">国服与国际服的历史记录分别存储，互不干扰。</p>
+        </section>
+
+        <section>
+            <h2><span class="icon">⭐</span>收藏管理 <span class="badge">侧边栏 tab · 国服+国际服</span></h2>
+            <p>把常用的搜索条件收藏起来，分文件夹整理，支持拖拽归类与导入导出备份。</p>
+            <ul>
+                <li>「收藏当前搜索」把当前页面搜索条件存为一条收藏。</li>
+                <li>「新建文件夹」自定义分类，收藏可在文件夹之间拖拽移动。</li>
+                <li>「导入文件夹」支持从导出的 JSON 备份恢复，跨设备 / 跨账号迁移。</li>
+            </ul>
+            <div class="tip"><strong>数据隔离：</strong>国服、国际服各自独立的收藏库，同一份导出文件可在两侧分别导入。</div>
+        </section>
+
+        <section>
+            <h2><span class="icon">📋</span>复制 PoB <span class="badge">结果行内联按钮 · 国服+国际服</span></h2>
+            <p>在每条搜索结果行上注入一个「复制PoB」按钮，一键把该物品翻译成 Path of Building 可识别的文本格式并写入剪贴板。</p>
+            <ul>
+                <li>中文词缀会被翻译回英文（PoB 只认英文），翻译表首次使用时从远程下载约 5.7MB 原料并在本地建表缓存，14 天更新一次。</li>
+                <li>物品数据由页面 fetch 劫持实时捕获，无需额外请求。</li>
+                <li>词典缓存可手动导入 / 更新（见设置页）。</li>
+            </ul>
+            <div class="tip"><strong>词典共用：</strong>翻译词典内容国服 / 国际服一致，共用一份缓存以节省空间。</div>
+        </section>
+
+        <section>
+            <h2><span class="icon">📖</span>查看词缀 <span class="badge">侧边栏 tab · 国服+国际服</span></h2>
+            <p>选中某物品类型后，展示该类型在 <a href="https://poe2db.tw" target="_blank" rel="noreferrer">poe2db.tw</a> 上的全部可出词缀（词缀池、来源分组）。</p>
+            <ul>
+                <li>类型识别用三种方式兜底：交易行 filters API、DOM 文字精确匹配、MAIN 世界 search 类别转发。</li>
+                <li>国服读 poe2db 简体页（<code>/cn/</code>），国际服读繁体页（<code>/tw/</code>），缓存 24 小时。</li>
+                <li>支持词缀池按来源（腐化、精华、渎灵等）筛选展示。</li>
+            </ul>
+            <div class="tip"><strong>常见问题：</strong>某类型「暂不支持查看词缀」通常是 poe2db 没有独立词缀页，或该类型未在类别映射表中。</div>
+        </section>
+
+        <section>
+            <h2><span class="icon">◆</span>妄想症统计 <span class="badge">侧边栏 tab · 国服+国际服 · 仅 POE2</span></h2>
+            <p>输入一个 <a href="https://poe.ninja/poe2/builds" target="_blank" rel="noreferrer">poe.ninja</a> 构筑列表链接和账号数量（10–100），后台抓取前 N 个角色的 Megalomaniac（妄想症）天赋珠并统计词条出现次数。</p>
+            <ul>
+                <li>英文词条通过当前 PoB 词典反查中文展示。</li>
+                <li>点击词条可查看天赋详情（stats 数值、购买 ID），并生成集市购买链接。</li>
+                <li>购买链接 payload 的 <code>count.value.min</code> 固定为 2，只替换对应词条 filter。</li>
+                <li>天赋树详情数据来自 poe2db，URL 可在面板里自定义，缓存复用。</li>
+                <li>上次输入 / 上次结果 / 勾选状态会缓存，刷新侧边栏不丢。</li>
+            </ul>
+            <div class="tip"><strong>限流说明：</strong>每两个角色之间固定等待 1200ms，遇到 poe.ninja 429 会停止后续请求并提示。账号越多耗时越久，属正常现象。</div>
+        </section>
+
+        <section>
+            <h2><span class="icon">⚙</span>通用说明</h2>
+            <ul>
+                <li><strong>侧边栏</strong>：右上角按钮依次为 刷新（重载当前 tab 数据）/ 清空（清当前 tab 数据）/ 设置（打开扩展设置页）。刷新和清空按当前 tab 是否支持自动显隐。</li>
+                <li><strong>功能开关</strong>：在设置页为每个功能分别配置国服 / 国际服是否启用。国服默认全开，国际服默认全关（未充分测试，需手动开启）。</li>
+                <li><strong>数据隔离</strong>：搜索历史、收藏、妄想症缓存、上次 tab 等所有用户数据按国服 / 国际服前缀独立存储，互不污染。</li>
+                <li><strong>加载方式</strong>：原生 JS，无构建步骤。改完代码后在 <code>chrome://extensions</code> 点扩展的「刷新」重载；content script 改动还需刷新目标页面。</li>
+            </ul>
+        </section>
+    </div>
+</body>
+
+</html>

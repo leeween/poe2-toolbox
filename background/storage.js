@@ -1,9 +1,10 @@
 // PoE2 工具箱 —— 搜索历史存储（后台模块）
-// 通过 TB.on 注册消息处理；存储键 poe1-/poe2- 前缀，与旧插件 schema 一致。
+// 通过 TB.on 注册消息处理；存储键按 version 前缀隔离：国服 poe2-（与旧插件 schema 一致，不动国服数据），
+// 国际服 poe2-intl-。
 'use strict';
 
 function vkey(version, key) {
-    return `${version === 'poe1' ? 'poe1' : 'poe2'}-${key}`;
+    return `${version}-${key}`;
 }
 
 async function saveSearchRecord(record, version) {
@@ -41,14 +42,16 @@ TB.on('CLEAR_SEARCH_HISTORY', async (req) => { await clearSearchHistory(req.vers
 
 // ── 定期清理 30 天前的记录 ────────────────────────────────────────
 function cleanupOldRecords() {
-    ['poe1', 'poe2'].forEach((version) => {
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    ['poe2', 'poe2-intl'].forEach((version) => {
         const k = vkey(version, 'searchHistory');
         chrome.storage.local.get({ [k]: [] }, (res) => {
-            const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
             const filtered = res[k].filter((r) => new Date(r.timestamp).getTime() > cutoff);
             if (filtered.length !== res[k].length) chrome.storage.local.set({ [k]: filtered });
         });
     });
+    // 顺手清理可能残留的 poe1 旧键
+    chrome.storage.local.remove('poe1-searchHistory');
 }
 
 chrome.alarms.create('cleanupOldRecords', { delayInMinutes: 1, periodInMinutes: 24 * 60 });

@@ -5,10 +5,10 @@ const ENABLED_KEY = 'tb-enabled';
 
 // 功能清单（与 content/features/* 的注册 id 对应）
 const FEATURES = [
-    { id: 'history', name: '搜索历史', desc: '自动记录国服集市搜索（POE1/POE2）' },
-    { id: 'favorites', name: '收藏管理', desc: '收藏 / 文件夹 / 拖拽 / 导入导出（国服）' },
-    { id: 'pob', name: '复制 PoB', desc: '在结果行加按钮，复制 Path of Building 文本（国服 POE2）' },
-    { id: 'view-mods', name: '查看词缀', desc: '查看物品类型在 poe2db 的全部可出词缀（国服+国际服 POE2）' },
+    { id: 'history', name: '搜索历史', desc: '自动记录集市搜索（POE2）' },
+    { id: 'favorites', name: '收藏管理', desc: '收藏 / 文件夹 / 拖拽 / 导入导出' },
+    { id: 'pob', name: '复制 PoB', desc: '在结果行加按钮，复制 Path of Building 文本（POE2）' },
+    { id: 'view-mods', name: '查看词缀', desc: '查看物品类型在 poe2db 的全部可出词缀' },
     { id: 'megalomaniac', name: '妄想症统计', desc: '统计 poe.ninja 构筑里 Megalomaniac 词条出现次数' },
 ];
 
@@ -24,9 +24,23 @@ function sendBg(msg) {
 }
 
 // ── 功能开关 ──────────────────────────────────────────────────────
+// 存储结构：{ qq: { [id]: bool }, intl: { [id]: bool } }；缺省 qq=true, intl=false。
+// 兼容旧扁平结构 { [id]: bool }：读取时迁移到 qq 子表。
+async function loadEnabled() {
+    const { [ENABLED_KEY]: raw } = await chrome.storage.local.get({ [ENABLED_KEY]: {} });
+    if (!raw) return { qq: {}, intl: {} };
+    if (raw.qq || raw.intl) return { qq: raw.qq || {}, intl: raw.intl || {} };
+    // 旧扁平结构 → 视作国服设置
+    const migrated = { qq: {}, intl: {} };
+    for (const [id, val] of Object.entries(raw)) {
+        if (typeof val === 'boolean') migrated.qq[id] = val;
+    }
+    await chrome.storage.local.set({ [ENABLED_KEY]: migrated });
+    return migrated;
+}
+
 async function renderFeatures() {
-    const { [ENABLED_KEY]: enabledRaw } = await chrome.storage.local.get({ [ENABLED_KEY]: {} });
-    const enabled = enabledRaw || {};
+    const enabled = await loadEnabled();
     const list = document.getElementById('feature-list');
     list.innerHTML = '';
     FEATURES.forEach((f) => {
@@ -37,18 +51,21 @@ async function renderFeatures() {
                 <div class="name">${f.name}</div>
                 <div class="desc">${f.desc}</div>
             </div>
-            <label class="switch">
-                <input type="checkbox" data-id="${f.id}" ${enabled[f.id] !== false ? 'checked' : ''}>
-                <span class="slider"></span>
-            </label>`;
+            <div class="switch-group">
+                <label class="switch-label">国服
+                    <label class="switch"><input type="checkbox" data-scope="qq" data-id="${f.id}" ${enabled.qq[f.id] !== false ? 'checked' : ''}><span class="slider"></span></label>
+                </label>
+                <label class="switch-label">国际服
+                    <label class="switch"><input type="checkbox" data-scope="intl" data-id="${f.id}" ${enabled.intl[f.id] === true ? 'checked' : ''}><span class="slider"></span></label>
+                </label>
+            </div>`;
         list.appendChild(row);
     });
     list.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
         cb.addEventListener('change', async () => {
-            const { [ENABLED_KEY]: cur } = await chrome.storage.local.get({ [ENABLED_KEY]: {} });
-            const map = cur || {};
-            map[cb.dataset.id] = cb.checked;
-            await chrome.storage.local.set({ [ENABLED_KEY]: map });
+            const cur = await loadEnabled();
+            cur[cb.dataset.scope][cb.dataset.id] = cb.checked;
+            await chrome.storage.local.set({ [ENABLED_KEY]: cur });
         });
     });
 }

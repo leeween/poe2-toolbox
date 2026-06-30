@@ -34,7 +34,7 @@
             return;
         }
         const stats = `<div class="tb-stats">共 ${history.length} 条记录</div>`;
-        const items = history.slice(0, 30).map((r) => `
+        const items = history.map((r) => `
             <div class="tb-list-item" data-url="${escapeHtml(r.url)}" data-id="${escapeHtml(r.id)}">
                 <button class="tb-item-del" data-id="${escapeHtml(r.id)}" title="删除">×</button>
                 <div class="tb-item-title">${escapeHtml(r.title)}</div>
@@ -132,7 +132,7 @@
         id: 'history',
         label: '搜索历史',
         icon: '🔍',
-        scope: (c) => c.isQQ,
+        scope: (c) => c.isQQ || c.isIntl,
         panel: true,
         mount,
     });

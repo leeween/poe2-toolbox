@@ -91,7 +91,7 @@
 
     async function loadLastInput() {
         try {
-            lastInput = await ctx.storage.getRaw(STORE_KEY, null);
+            lastInput = await ctx.storage.get(STORE_KEY, null);
         } catch (e) {
             lastInput = null;
         }
@@ -100,12 +100,12 @@
 
     async function saveLastInput(input) {
         lastInput = input;
-        try { await ctx.storage.setRaw(STORE_KEY, input); } catch (e) { /* ignore */ }
+        try { await ctx.storage.set(STORE_KEY, input); } catch (e) { /* ignore */ }
     }
 
     async function loadLastResult() {
         try {
-            return await ctx.storage.getRaw(RESULT_CACHE_KEY, null);
+            return await ctx.storage.get(RESULT_CACHE_KEY, null);
         } catch (e) {
             return null;
         }
@@ -114,7 +114,7 @@
     async function saveLastResult() {
         if (!currentResult) return;
         try {
-            await ctx.storage.setRaw(RESULT_CACHE_KEY, {
+            await ctx.storage.set(RESULT_CACHE_KEY, {
                 result: currentResult,
                 input: lastInput,
                 passiveUrl,
@@ -127,7 +127,7 @@
 
     async function loadPassiveUrl() {
         try {
-            passiveUrl = await ctx.storage.getRaw(PASSIVE_URL_KEY, DEFAULT_PASSIVE_URL) || DEFAULT_PASSIVE_URL;
+            passiveUrl = await ctx.storage.get(PASSIVE_URL_KEY, DEFAULT_PASSIVE_URL) || DEFAULT_PASSIVE_URL;
         } catch (e) {
             passiveUrl = DEFAULT_PASSIVE_URL;
         }
@@ -136,7 +136,7 @@
 
     async function savePassiveUrl(url) {
         passiveUrl = url || DEFAULT_PASSIVE_URL;
-        try { await ctx.storage.setRaw(PASSIVE_URL_KEY, passiveUrl); } catch (e) { /* ignore */ }
+        try { await ctx.storage.set(PASSIVE_URL_KEY, passiveUrl); } catch (e) { /* ignore */ }
     }
 
     function passiveDetail(name) {
@@ -161,8 +161,9 @@
             const detail = passiveDetail(item.name);
             const checked = selectedNames.has(item.name) ? 'checked' : '';
             const disabled = detail.id ? '' : 'disabled';
+            const selectable = detail.id ? ' tb-mg-row-selectable' : '';
             return `
-            <div class="tb-mg-row">
+            <div class="tb-mg-row${selectable}">
                 <div class="tb-mg-main">
                     <div class="tb-mg-line">
                         <span class="tb-mg-name">${escapeHtml(item.name)}</span>
@@ -216,7 +217,7 @@
 
     async function loadPassiveDetailsFromCache(url) {
         try {
-            const cache = await ctx.storage.getRaw(PASSIVE_CACHE_KEY, null);
+            const cache = await ctx.storage.get(PASSIVE_CACHE_KEY, null);
             if (cache && cache.url === url && cache.details) {
                 const first = cache.details[Object.keys(cache.details)[0]];
                 if (!Array.isArray(first)) return cache.details;
@@ -227,7 +228,7 @@
 
     async function storePassiveDetails(url, details) {
         try {
-            await ctx.storage.setRaw(PASSIVE_CACHE_KEY, { url, details, cachedAt: Date.now() });
+            await ctx.storage.set(PASSIVE_CACHE_KEY, { url, details, cachedAt: Date.now() });
         } catch (e) { /* ignore */ }
     }
 
@@ -351,6 +352,12 @@
         bodyEl.addEventListener('click', (e) => {
             if (e.target.closest('.tb-mg-detail-btn')) showPassiveDetails();
             if (e.target.closest('.tb-mg-buy')) openBuyLink();
+            const row = e.target.closest('.tb-mg-row');
+            if (!row || e.target.closest('button,input,select,textarea,a,label')) return;
+            const check = row.querySelector('.tb-mg-check:not(:disabled)');
+            if (!check) return;
+            check.checked = !check.checked;
+            check.dispatchEvent(new Event('change', { bubbles: true }));
         });
         bodyEl.addEventListener('change', (e) => {
             const check = e.target.closest('.tb-mg-check');
@@ -393,7 +400,7 @@
         id: 'megalomaniac',
         label: '妄想症统计',
         icon: '◆',
-        scope: (c) => (c.isQQ || c.isIntl) && c.version === 'poe2',
+        scope: (c) => c.isQQ || c.isIntl,
         panel: true,
         mount,
     });

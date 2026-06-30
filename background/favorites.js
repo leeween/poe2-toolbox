@@ -107,6 +107,71 @@ async function moveToRoot(favoriteId, version) {
     await chrome.storage.local.set({ [k]: favorites });
 }
 
+// 按 id 顺序重排根级收藏与各文件夹内 items。
+// payload: { rootOrder: [id...], folderItems: { [folderId]: [id...] } }
+// 缺失的 id（不在 rootOrder 也没在任何 folderItems 里）按原顺序追加到根级末尾，
+// 保证不会因前端漏发而丢数据。
+async function reorderFavorites(payload, version) {
+    const { k, list } = await getFavoritesRaw(version);
+    const all = list;
+    const rootOrder = (payload && payload.rootOrder) || [];
+    const folderItems = (payload && payload.folderItems) || {};
+
+    // byId 必须包含所有项：根级 + 每个 folder 内的 items
+    const byId = new Map();
+    const rootItems = []; // 仅根级项（含 folder），保持原顺序
+    for (const item of all) {
+        byId.set(item.id, item);
+        rootItems.push(item);
+        if (item.type === 'folder' && Array.isArray(item.items)) {
+            for (const sub of item.items) {
+                if (!byId.has(sub.id)) byId.set(sub.id, sub);
+            }
+        }
+    }
+    const seen = new Set();
+
+    const newRoot = [];
+    for (const id of rootOrder) {
+        const item = byId.get(id);
+        if (item && !seen.has(id)) { newRoot.push(item); seen.add(id); }
+    }
+    // folder 内 items 重排（folder 对象沿用 newRoot 里已收集的同一引用）
+    for (const item of all) {
+        if (item.type === 'folder') {
+            const order = folderItems[item.id];
+            if (order && Array.isArray(order)) {
+                const newItems = [];
+                for (const id of order) {
+                    const it = byId.get(id);
+                    if (it && it.type !== 'folder' && !seen.has(id)) {
+                        newItems.push(it); seen.add(id);
+                    }
+                }
+                item.items = newItems;
+            } else {
+                item.items = (item.items || []).filter((it) => {
+                    if (seen.has(it.id)) return false;
+                    seen.add(it.id); return true;
+                });
+            }
+        }
+    }
+    // 追加未列出的根级项到末尾（防丢）。folder 内未列出的 item 也补回各自 folder。
+    for (const item of rootItems) {
+        if (!seen.has(item.id)) {
+            if (item.type === 'folder') {
+                item.items = (item.items || []).filter((it) => {
+                    if (seen.has(it.id)) return false;
+                    seen.add(it.id); return true;
+                });
+            }
+            newRoot.push(item); seen.add(item.id);
+        }
+    }
+    await chrome.storage.local.set({ [k]: newRoot });
+}
+
 async function exportFolder(folderId, version) {
     const { list } = await getFavoritesRaw(version);
     const folder = list.find((i) => i.id === folderId && i.type === 'folder');
@@ -192,5 +257,6 @@ TB.on('DELETE_FOLDER', async (req) => { await deleteFolder(req.id, req.version);
 TB.on('ADD_TO_FOLDER', async (req) => { await addToFolder(req.favorite, req.folderId, req.version); });
 TB.on('RENAME_FOLDER', async (req) => { await renameFolder(req.id, req.newName, req.version); });
 TB.on('MOVE_TO_ROOT', async (req) => { await moveToRoot(req.favoriteId, req.version); });
+TB.on('REORDER_FAVORITES', async (req) => { await reorderFavorites(req.payload, req.version); });
 TB.on('EXPORT_FOLDER', async (req) => ({ data: await exportFolder(req.folderId, req.version) }));
 TB.on('IMPORT_FOLDER', async (req) => ({ data: await importFolder(req.importData, req.version) }));

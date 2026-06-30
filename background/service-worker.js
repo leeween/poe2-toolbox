@@ -18,8 +18,9 @@ importScripts(
     'poe-ninja.js'
 );
 
-// ── 内置处理：打开设置页 ───────────────────────────────────────────
+// ── 内置处理：打开设置页 / 介绍页 ───────────────────────────────────
 TB.on('OPEN_OPTIONS', () => { chrome.runtime.openOptionsPage(); return {}; });
+TB.on('OPEN_INTRO', () => { chrome.tabs.create({ url: chrome.runtime.getURL('options/intro.html') }); return {}; });
 
 chrome.runtime.onInstalled.addListener(() => console.log('[PoE2TB] 已安装'));
 

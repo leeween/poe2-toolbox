@@ -9,13 +9,10 @@
 
     // ── 站点 / 版本探测 ────────────────────────────────────────────────
     const host = window.location.hostname;
-    const path = window.location.pathname;
     const isQQ = host === 'poe.game.qq.com';
     const isIntl = host === 'www.pathofexile.com';
-    // poe2：路径以 /trade2 开头；poe1：/trade（且非 /trade2）
-    const version = path.startsWith('/trade2') ? 'poe2'
-        : path.startsWith('/trade') ? 'poe1'
-            : 'poe2';
+    // 国服用 poe2- 前缀（与旧插件 schema 一致，不动国服数据）；国际服用 poe2-intl- 前缀做数据隔离。
+    const version = isIntl ? 'poe2-intl' : 'poe2';
 
     // ── 工具函数 ──────────────────────────────────────────────────────
     function escapeHtml(text) {
@@ -44,7 +41,7 @@
     }
 
     // ── 存储助手 ──────────────────────────────────────────────────────
-    // 版本化键：poe1- / poe2- 前缀，与旧插件 schema 保持一致，便于数据互通。
+    // 版本化键：poe2- 前缀，与旧插件 schema 保持一致，便于数据互通。
     const storage = {
         vkey(name) { return `${version}-${name}`; },
         async get(name, def) {
@@ -65,13 +62,18 @@
         },
     };
 
-    // 功能开关（全局键 tb-enabled = { [featureId]: boolean }，缺省视为启用）
+    // 功能开关（全局键 tb-enabled = { qq: { [id]: bool }, intl: { [id]: bool } }）
+    // 缺省：国服启用，国际服关闭。
     const ENABLED_KEY = 'tb-enabled';
     async function getEnabledMap() {
         return (await storage.getRaw(ENABLED_KEY, {})) || {};
     }
     function isEnabled(map, id) {
-        return map[id] !== false; // 默认启用
+        const sub = map && (isQQ ? map.qq : map.intl);
+        if (sub && Object.prototype.hasOwnProperty.call(sub, id)) {
+            return sub[id] !== false;
+        }
+        return isQQ; // 国服默认启用，国际服默认关闭
     }
 
     // ── 后台消息 ──────────────────────────────────────────────────────
@@ -93,22 +95,12 @@
         for (const [key, value] of url.searchParams.entries()) {
             if (value && value.trim() !== '') params[key] = value;
         }
-        if (isQQ) {
-            if (url.pathname.includes('/trade2/search/poe2/')) {
-                const p = url.pathname.split('/');
-                if (p.length >= 6) {
-                    const league = decodeURIComponent(p[4]);
-                    if (league) params.league = league;
-                    if (p[5]) params.search_id = p[5];
-                }
-            } else if (url.pathname.includes('/trade/search/')) {
-                const p = url.pathname.split('/').filter(Boolean);
-                const si = p.indexOf('search');
-                if (si !== -1 && si + 1 < p.length) {
-                    const league = decodeURIComponent(p[si + 1]);
-                    if (league && league !== 'search') params.league = league;
-                    if (si + 2 < p.length && p[si + 2]) params.search_id = p[si + 2];
-                }
+        if (url.pathname.includes('/trade2/search/poe2/')) {
+            const p = url.pathname.split('/');
+            if (p.length >= 6) {
+                const league = decodeURIComponent(p[4]);
+                if (league) params.league = league;
+                if (p[5]) params.search_id = p[5];
             }
         }
         try {

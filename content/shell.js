@@ -133,7 +133,10 @@
         panelEl.id = 'tb-panel';
         panelEl.innerHTML = `
             <div class="tb-header">
-                <div class="tb-title"><span class="tb-logo">⚖</span><span>PoE2 工具箱</span></div>
+                <div class="tb-title">
+                    <span class="tb-logo">⚖</span><span>PoE2 工具箱</span>
+                    <button class="tb-qa-btn" title="功能介绍">?</button>
+                </div>
                 <div class="tb-header-actions">
                     <button class="tb-icon-btn tb-refresh" title="刷新">↻</button>
                     <button class="tb-icon-btn tb-clear" title="清空">🗑</button>
@@ -183,6 +186,7 @@
         panelEl.querySelector('.tb-refresh').addEventListener('click', () => activeHandle()?.onRefresh?.());
         panelEl.querySelector('.tb-clear').addEventListener('click', () => activeHandle()?.onClear?.());
         panelEl.querySelector('.tb-settings').addEventListener('click', () => ctx.sendBg({ type: 'OPEN_OPTIONS' }));
+        panelEl.querySelector('.tb-qa-btn').addEventListener('click', () => ctx.sendBg({ type: 'OPEN_INTRO' }));
         toggleEl.addEventListener('click', togglePanel);
     }
 
@@ -198,9 +202,10 @@
             t.btn.classList.toggle('active', on);
             t.panel.classList.toggle('active', on);
         }
-        // 清空按钮按能力显隐
+        // 清空 / 刷新按钮按能力显隐
         const h = tabs.get(id).handle;
         panelEl.querySelector('.tb-clear').style.display = h && h.onClear ? '' : 'none';
+        panelEl.querySelector('.tb-refresh').style.display = h && h.onRefresh ? '' : 'none';
         try { h?.onShow?.(); } catch (e) { console.error(e); }
         ctx.storage.set('last-tab', id);
     }

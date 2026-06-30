@@ -12,13 +12,37 @@
     // ── 渲染 ─────────────────────────────────────────────────────────
     function favItemHtml(item, inFolder = false) {
         return `
-            <div class="tb-fav-item ${inFolder ? '' : 'draggable'}"
+            <div class="tb-fav-item draggable"
                  data-url="${escapeHtml(item.url)}" data-id="${escapeHtml(item.id)}"
-                 ${inFolder ? '' : 'draggable="true"'}>
+                 data-kind="item" draggable="true">
                 <div class="tb-fav-main"><div class="tb-fav-title">${escapeHtml(item.name)}</div></div>
                 <div class="tb-fav-actions">
                     ${inFolder ? '<button class="tb-fav-move" title="移动到根目录">📤</button>' : ''}
                     <button class="tb-fav-del" title="删除收藏">🗑️</button>
+                </div>
+            </div>`;
+    }
+
+    function folderHtml(folder) {
+        const inner = folder.items && folder.items.length
+            ? folder.items.map((i) => favItemHtml(i, true)).join('')
+            : '<div class="tb-empty">文件夹为空</div>';
+        return `
+            <div class="tb-folder draggable" data-id="${escapeHtml(folder.id)}" data-kind="folder" draggable="true">
+                <div class="tb-folder-header">
+                    <div class="tb-folder-title">📁 ${escapeHtml(folder.name)}</div>
+                    <div class="tb-folder-actions">
+                        <button class="tb-folder-export" title="导出文件夹">📤</button>
+                        <button class="tb-folder-rename" title="重命名">✏️</button>
+                        <button class="tb-folder-del" title="删除文件夹">🗑️</button>
+                        <span class="tb-folder-toggle">▼</span>
+                    </div>
+                </div>
+                <div class="tb-folder-content" data-folder-id="${escapeHtml(folder.id)}">
+                    <div class="tb-folder-toolbar">
+                        <button class="tb-folder-add" data-folder-id="${escapeHtml(folder.id)}">⭐ 收藏到此文件夹</button>
+                    </div>
+                    ${inner}
                 </div>
             </div>`;
     }
@@ -29,35 +53,13 @@
             listEl.innerHTML = '<div class="tb-empty">暂无收藏</div>';
             return;
         }
-        const folders = favorites.filter((i) => i.type === 'folder');
-        const items = favorites.filter((i) => i.type === 'favorite');
-        let html = '';
-        folders.forEach((folder) => {
-            const inner = folder.items && folder.items.length
-                ? folder.items.map((i) => favItemHtml(i, true)).join('')
-                : '<div class="tb-empty">文件夹为空</div>';
-            html += `
-                <div class="tb-folder" data-id="${escapeHtml(folder.id)}">
-                    <div class="tb-folder-header">
-                        <div class="tb-folder-title">📁 ${escapeHtml(folder.name)}</div>
-                        <div class="tb-folder-actions">
-                            <button class="tb-folder-export" title="导出文件夹">📤</button>
-                            <button class="tb-folder-rename" title="重命名">✏️</button>
-                            <button class="tb-folder-del" title="删除文件夹">🗑️</button>
-                            <span class="tb-folder-toggle">▼</span>
-                        </div>
-                    </div>
-                    <div class="tb-folder-content" data-folder-id="${escapeHtml(folder.id)}">
-                        <div class="tb-folder-toolbar">
-                            <button class="tb-folder-add" data-folder-id="${escapeHtml(folder.id)}">⭐ 收藏到此文件夹</button>
-                        </div>
-                        ${inner}
-                    </div>
-                </div>`;
-        });
-        if (items.length) {
-            html += '<div class="tb-root-favs">' + items.map((i) => favItemHtml(i)).join('') + '</div>';
+        // 按根数组原顺序渲染（folder 与 item 混排），保留拖拽重排结果
+        let html = '<div class="tb-root-favs">';
+        for (const it of favorites) {
+            if (it.type === 'folder') html += folderHtml(it);
+            else html += favItemHtml(it);
         }
+        html += '</div>';
         listEl.innerHTML = html;
     }
 
@@ -274,44 +276,145 @@
     }
 
     function setupDragAndDrop() {
-        let dragged = null;
+        let dragged = null; // { kind: 'item'|'folder', id, el }
+
+        function closestDraggable(el) {
+            return el.closest('.draggable[data-id]');
+        }
+
         listEl.addEventListener('dragstart', (e) => {
-            if (e.target.classList.contains('draggable')) {
-                dragged = e.target;
-                e.target.classList.add('dragging');
-                e.dataTransfer.effectAllowed = 'move';
-            }
+            const el = closestDraggable(e.target);
+            if (!el) return;
+            dragged = { kind: el.dataset.kind, id: el.dataset.id, el };
+            el.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            try { e.dataTransfer.setData('text/plain', el.dataset.id); } catch (err) { /* ignore */ }
         });
-        listEl.addEventListener('dragend', (e) => {
-            if (e.target.classList.contains('draggable')) {
-                e.target.classList.remove('dragging');
-                listEl.querySelectorAll('.drag-over').forEach((el) => el.classList.remove('drag-over'));
-                dragged = null;
-            }
+        listEl.addEventListener('dragend', () => {
+            listEl.querySelectorAll('.dragging, .drag-over, .drop-above, .drop-below')
+                .forEach((el) => el.classList.remove('dragging', 'drag-over', 'drop-above', 'drop-below'));
+            dragged = null;
         });
+
         listEl.addEventListener('dragover', (e) => {
+            if (!dragged) return;
             e.preventDefault();
-            const content = e.target.closest('.tb-folder-content');
-            if (content && dragged) { e.dataTransfer.dropEffect = 'move'; content.classList.add('drag-over'); }
+            e.dataTransfer.dropEffect = 'move';
+            listEl.querySelectorAll('.drag-over, .drop-above, ' +
+                '.drop-below').forEach((el) => el.classList.remove('drag-over', 'drop-above', 'drop-below'));
+            const target = computeDropTarget(e);
+            if (!target) return;
+            if (target.mode === 'into-folder') target.ref.classList.add('drag-over');
+            else if (target.mode === 'reorder-above') target.ref.classList.add('drop-above');
+            else if (target.mode === 'reorder-below') target.ref.classList.add('drop-below');
         });
-        listEl.addEventListener('dragleave', (e) => {
-            const content = e.target.closest('.tb-folder-content');
-            if (content && !content.contains(e.relatedTarget)) content.classList.remove('drag-over');
-        });
+
         listEl.addEventListener('drop', async (e) => {
+            if (!dragged) return;
             e.preventDefault();
-            const content = e.target.closest('.tb-folder-content');
-            if (content && dragged) {
-                const folderId = content.dataset.folderId;
-                const favoriteId = dragged.dataset.id;
-                if (folderId && favoriteId) {
-                    const resp = await ctx.sendBg({ type: 'MOVE_TO_FOLDER', favoriteId, folderId });
-                    if (resp && resp.success) load();
-                    else ctx.ui.toast('移动失败，请重试', 'error');
+            const target = computeDropTarget(e);
+            listEl.querySelectorAll('.dragging, .drag-over, .drop-above, ' +
+                '.drop-below').forEach((el) => el.classList.remove('dragging', 'drag-over', 'drop-above', 'drop-below'));
+            if (!target) { dragged = null; return; }
+            try { await applyDrop(dragged, target); }
+            catch (err) { ctx.ui.toast('移动失败，请重试', 'error'); }
+            dragged = null;
+        });
+
+        // 计算落点：返回 { mode, ref, folderId? }
+        // mode: 'into-folder'（拖 item 进文件夹内容区）/ 'reorder-above' / 'reorder-below'
+        function computeDropTarget(e) {
+            const overEl = e.target;
+            if (!overEl) return null;
+            // 1) 文件夹内容区（drop item into folder）
+            const content = overEl.closest('.tb-folder-content');
+            if (content && dragged && dragged.kind === 'item') {
+                // 落在内容区toolbar 下方区域 或 空内容区 → 移入该文件夹
+                const rect = content.getBoundingClientRect();
+                // 内容区内若靠近某个子 item 则按子 item 位置 reorder，否则进文件夹
+                const childItem = overEl.closest('.tb-fav-item[data-kind="item"]');
+                if (childItem && content.contains(childItem)) {
+                    return placeBetween(childItem, e);
+                }
+                // 仅当指针明显落在内容区非 toolbar 处时才进文件夹
+                if (e.clientY > rect.top + 4) {
+                    return { mode: 'into-folder', ref: content, folderId: content.dataset.folderId };
                 }
             }
-            listEl.querySelectorAll('.drag-over').forEach((el) => el.classList.remove('drag-over'));
-        });
+            // 2) 拖 folder / item 在根级重排
+            const rootFav = overEl.closest('.tb-root-favs');
+            if (rootFav) {
+                // 落到根里某个 draggable 项上 → 上下插入
+                const ref = closestDraggable(overEl);
+                if (ref && ref !== dragged.el) return placeBetween(ref, e);
+                // 落到根空白处 → 放回根级末尾（item）或不处理（folder）
+                return dragged.kind === 'item'
+                    ? { mode: 'root-end', ref: null }
+                    : null;
+            }
+            // 3) 落在文件夹内 item 上 但属于跨文件夹拖动（item→item）
+            if (dragged.kind === 'item') {
+                const ref = overEl.closest('.tb-fav-item[data-kind="item"]');
+                if (ref && ref !== dragged.el) return placeBetween(ref, e);
+            }
+            return null;
+        }
+
+        function placeBetween(ref, e) {
+            const r = ref.getBoundingClientRect();
+            const above = (e.clientY - r.top) < (r.height / 2);
+            return { mode: above ? 'reorder-above' : 'reorder-below', ref };
+        }
+
+        // 把 drop 应用到 DOM 顺序，再发 REORDER 到后台
+        async function applyDrop(drag, target) {
+            if (target.mode === 'into-folder') {
+                // item → folder
+                const resp = await ctx.sendBg({
+                    type: 'MOVE_TO_FOLDER',
+                    favoriteId: drag.id,
+                    folderId: target.folderId,
+                });
+                if (!resp || !resp.success) throw new Error('move failed');
+                load();
+                return;
+            }
+
+            // reorder：先在 DOM 里移动节点拿到新顺序
+            const rootEl = listEl.querySelector('.tb-root-favs');
+            if (!rootEl) return;
+            const dragEl = drag.el;
+            // folder 不能进文件夹内容区，只能根级重排
+            if (target.mode === 'reorder-above' || target.mode === 'reorder-below') {
+                const ref = target.ref;
+                // 不允许把 folder 拖进文件夹 content 区域内（ref 若在 folder-content 内且 drag 是 folder → 跳过）
+                if (drag.kind === 'folder' && ref.closest('.tb-folder-content')) return;
+                if (ref === dragEl) return;
+                const insertBefore = target.mode === 'reorder-above';
+                ref.parentNode.insertBefore(dragEl, insertBefore ? ref : ref.nextSibling);
+            } else if (target.mode === 'root-end') {
+                rootEl.appendChild(dragEl);
+            } else {
+                return;
+            }
+
+            // 收集新顺序
+            const rootOrder = Array.from(rootEl.querySelectorAll(':scope > [data-id]'))
+                .map((el) => el.dataset.id);
+            const folderItems = {};
+            rootEl.querySelectorAll('.tb-folder').forEach((fEl) => {
+                const fid = fEl.dataset.id;
+                const ids = Array.from(fEl.querySelectorAll('.tb-folder-content > .tb-fav-item[data-id]'))
+                    .map((it) => it.dataset.id);
+                folderItems[fid] = ids;
+            });
+            const resp = await ctx.sendBg({
+                type: 'REORDER_FAVORITES',
+                payload: { rootOrder, folderItems },
+            });
+            if (!resp || !resp.success) throw new Error('reorder failed');
+            load();
+        }
     }
 
     function mount(panelEl) {
@@ -334,7 +437,7 @@
         id: 'favorites',
         label: '收藏',
         icon: '⭐',
-        scope: (c) => c.isQQ,
+        scope: (c) => c.isQQ || c.isIntl,
         panel: true,
         mount,
     });

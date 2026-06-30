@@ -349,7 +349,7 @@
         id: 'view-mods',
         label: '查看词缀',
         icon: '📜',
-        scope: (c) => (c.isQQ || c.isIntl) && c.version === 'poe2',
+        scope: (c) => c.isQQ || c.isIntl,
         panel: true,
         mount,
     });
