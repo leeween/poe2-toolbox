@@ -104,6 +104,29 @@
     let toggleEl = null;
     const tabs = new Map(); // id -> { btn, panel, handle, feature }
     let currentTabId = null;
+    let tooltipEl = null;
+    let tooltipTimer = null;
+
+    function showTabTooltip(btn, label) {
+        clearTimeout(tooltipTimer);
+        tooltipTimer = setTimeout(() => {
+            if (!tooltipEl) {
+                tooltipEl = document.createElement('div');
+                tooltipEl.className = 'tb-tab-tooltip';
+                document.body.appendChild(tooltipEl);
+            }
+            tooltipEl.textContent = label;
+            const r = btn.getBoundingClientRect();
+            tooltipEl.style.top = `${r.bottom + 6}px`;
+            tooltipEl.style.left = `${r.left + r.width / 2}px`;
+            tooltipEl.classList.add('show');
+        }, 120);
+    }
+
+    function hideTabTooltip() {
+        clearTimeout(tooltipTimer);
+        if (tooltipEl) tooltipEl.classList.remove('show');
+    }
 
     function buildPanel(panelFeatures) {
         panelEl = document.createElement('div');
@@ -136,8 +159,13 @@
             const btn = document.createElement('button');
             btn.className = 'tb-tab-btn';
             btn.dataset.tab = feature.id;
-            btn.textContent = (feature.icon ? feature.icon + ' ' : '') + feature.label;
+            btn.dataset.label = feature.label;
+            btn.textContent = feature.icon || feature.label;
             btn.addEventListener('click', () => switchTab(feature.id));
+            btn.addEventListener('mouseenter', () => showTabTooltip(btn, feature.label));
+            btn.addEventListener('mouseleave', hideTabTooltip);
+            btn.addEventListener('focus', () => showTabTooltip(btn, feature.label));
+            btn.addEventListener('blur', hideTabTooltip);
             tabsBar.appendChild(btn);
 
             const panel = document.createElement('div');
