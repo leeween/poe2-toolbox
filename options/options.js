@@ -9,6 +9,7 @@ const FEATURES = [
     { id: 'favorites', name: '收藏管理', desc: '收藏 / 文件夹 / 拖拽 / 导入导出（国服）' },
     { id: 'pob', name: '复制 PoB', desc: '在结果行加按钮，复制 Path of Building 文本（国服 POE2）' },
     { id: 'view-mods', name: '查看词缀', desc: '查看物品类型在 poe2db 的全部可出词缀（国服+国际服 POE2）' },
+    { id: 'megalomaniac', name: '妄想症统计', desc: '统计 poe.ninja 构筑里 Megalomaniac 词条出现次数' },
 ];
 
 function sendBg(msg) {

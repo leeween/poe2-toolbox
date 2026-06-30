@@ -11,7 +11,8 @@
     ],
     "host_permissions": [
         "https://poe2db.tw/*",
-        "https://ninja.710421059.xyz/*"
+        "https://ninja.710421059.xyz/*",
+        "https://poe.ninja/*"
     ],
     "background": {
         "service_worker": "background/service-worker.js"
@@ -33,6 +34,7 @@
                 "content/features/favorites.js",
                 "content/features/pob-copy.js",
                 "content/features/view-mods.js",
+                "content/features/megalomaniac.js",
                 "content/shell.js"
             ],
             "css": [

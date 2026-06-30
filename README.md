@@ -6,6 +6,7 @@
 - **收藏管理** — 收藏 / 文件夹 / 拖拽 / LZ-String 压缩导入导出（国服）。
 - **复制 PoB** — 在搜索结果行加「复制PoB」按钮，直接复制 Path of Building 可导入的英文物品文本（国服 POE2）。
 - **查看词缀** — 选择物品类型后查看该类型在 poe2db 上的全部可出词缀（国服 + 国际服 POE2）。
+- **妄想症统计** — 输入 poe.ninja 构筑列表链接，统计 Megalomaniac 天赋词条出现次数，并可生成国服 / 国际服购买链接（国服 + 国际服 POE2）。
 
 ## 安装
 
@@ -22,7 +23,7 @@
 ```
 [MAIN 世界]  content/pob-netcapture.main.js   劫持 fetch/XHR 抓物品 JSON → postMessage
 [隔离世界]   content/{ctx,shell}.js + features/*  侧边栏 UI / 注入 / 翻译 / chrome.* / 剪贴板
-[后台 SW]    background/*                       跨域抓取(poe2db/词典源) / 词典建表 / 存储 CRUD
+[后台 SW]    background/*                       跨域抓取(poe2db/poe.ninja/词典源) / 词典建表 / 存储 CRUD
 ```
 
 - `content/ctx.js` — 共享上下文：版本探测、功能注册表、版本化存储、后台消息、工具函数。
@@ -36,8 +37,28 @@
 
 建表逻辑（`lib/dict-build.js` + `lib/dict-normalize.js`）由 `scripts/poe2/poe2-pob-dict-build.py` 移植而来，`tools/verify-dict.mjs` 用于校验两者输出逐键一致。
 
+## 妄想症统计
+
+「妄想症统计」用于批量查看 poe.ninja 构筑列表中 `Megalomaniac` 的天赋词条分布。
+
+使用流程：
+
+1. 在国服或国际服 POE2 集市页打开侧边栏，进入「妄想症统计」。
+2. 点击「开始统计」，输入 poe.ninja builds 链接，例如 `https://poe.ninja/poe2/builds/runesofaldur?class=Martial+Artist&items=Megalomaniac`。
+3. 选择账号数量，范围 10 到 100；如果当前页面不足指定数量，则按实际可用数量统计。
+4. 统计完成后可点击「查看天赋详情」，默认从 `https://poe2db.tw/data/passive-skill-tree/4.5/data_cn.json` 读取天赋详情、天赋 ID，并缓存到本地。
+5. 勾选需要的天赋后选择国服或国际服，点击「去购买」会按所选天赋 ID 生成集市搜索链接。
+
+实现说明：
+
+- 后台模块 `background/poe-ninja.js` 会解析 poe.ninja builds 链接中的 league，向 poe.ninja 查询当前 snapshot version，再读取列表前 N 个角色。
+- 角色详情请求会串行执行，并在请求之间加入固定延迟，以降低触发 poe.ninja 限流的概率；账号数量越多，等待时间越长。
+- Megalomaniac 的 `enchantMods` 先提取英文天赋名，再复用当前 PoB 词典缓存翻译成中文。
+- 最近一次统计结果、输入参数、勾选状态、购买服务器和天赋详情链接会缓存到 `chrome.storage.local`，再次打开面板时会直接展示上一次结果。
+
 ## 开发
 
 - 无构建步骤；改完 JS 用 `node --check <file>` 验证语法。
 - 词典建表正确性：`node tools/verify-dict.mjs`（需要 `scripts/poe2/` 的 `poe2-lang-sc.json` 与 `poe2-pob-dict.user.js` 作参考）。
+- 本地调试妄想症统计：`node tools/poe-ninja-megalomaniac.mjs "<poe.ninja builds 链接>" 20`。
 - 改完在 `chrome://extensions` 点扩展的「刷新」重新加载。

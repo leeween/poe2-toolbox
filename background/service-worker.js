@@ -14,7 +14,8 @@ importScripts(
     'storage.js',
     'favorites.js',
     'dict.js',
-    'poe2db.js'
+    'poe2db.js',
+    'poe-ninja.js'
 );
 
 // ── 内置处理：打开设置页 ───────────────────────────────────────────

@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-本文件指导 Claude Code 在 **poe2-toolbox** 仓库工作。动手前先读这里。
+本文件指导 Codex 在 **poe2-toolbox** 仓库工作。动手前先读这里。
 
 ## 这个项目是什么
 
@@ -17,7 +17,7 @@
 - **无构建步骤**：原生 JS、classic script + `importScripts` + 全局命名空间（沿用旧插件/codex-auto 习惯）。不要引入 pnpm/打包/TS/lint。
 - 改完 JS 一律 `node --check <file>` 验证语法。
 - 加载：`chrome://extensions` → 开发者模式 → 加载已解压 → 选本目录；改完点扩展的「刷新」重载。content script 改动还需刷新目标页面。
-- 提交信息结尾加：`Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`。
+- 提交信息结尾加：`Co-Authored-By: Codex Opus 4.8 <noreply@anthropic.com>`。
 
 ## 架构：三个执行世界
 

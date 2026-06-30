@@ -2,3 +2,4 @@
 node_modules/
 *.log
 tools/_local/
+statics/lang-sc.json
