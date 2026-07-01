@@ -8,51 +8,8 @@
     const log = (...a) => false && console.log('[poe2-mods]', ...a);
     const warn = (...a) => console.warn('[poe2-mods]', ...a);
 
-    // 防具防御变体后缀 -> 显示名
-    const ARMOUR_DEFS = [
-        ['str', '护甲'], ['dex', '闪避'], ['int', '能量护盾'],
-        ['str_dex', '护甲/闪避'], ['str_int', '护甲/能量护盾'],
-        ['dex_int', '闪避/能量护盾'], ['str_dex_int', '全属性'],
-    ];
-
-    // 交易行类别 id -> poe2db slug（字符串=单页；{slug,note}=单页带提示；
-    // {armour:'X'}=防具多变体；{multi:[[slug,label]...]}=多页 tab）
-    const CATEGORY_MAP = {
-        'weapon.claw': 'Claws', 'weapon.dagger': 'Daggers', 'weapon.onesword': 'One_Hand_Swords',
-        'weapon.oneaxe': 'One_Hand_Axes', 'weapon.onemace': 'One_Hand_Maces', 'weapon.spear': 'Spears',
-        'weapon.flail': 'Flails', 'weapon.twosword': 'Two_Hand_Swords', 'weapon.twoaxe': 'Two_Hand_Axes',
-        'weapon.twomace': 'Two_Hand_Maces', 'weapon.warstaff': 'Quarterstaves',
-        'weapon.bow': 'Bows', 'weapon.crossbow': 'Crossbows',
-        'weapon.wand': 'Wands', 'weapon.sceptre': 'Sceptres', 'weapon.staff': 'Staves', 'weapon.talisman': 'Talismans',
-        'armour.focus': 'Foci', 'armour.buckler': 'Bucklers', 'armour.quiver': 'Quivers',
-        'accessory.amulet': 'Amulets', 'accessory.belt': 'Belts', 'accessory.ring': 'Rings',
-        'jewel': {
-            multi: [
-                ['Ruby', '红玉'], ['Emerald', '翡翠'], ['Sapphire', '蓝玉'], ['Diamond', '宝钻'],
-                ['Time-Lost_Ruby', '失落的红玉'], ['Time-Lost_Emerald', '失落的翡翠'],
-                ['Time-Lost_Sapphire', '失落的蓝玉'], ['Time-Lost_Diamond', '失落的宝钻'],
-            ]
-        },
-        'flask.life': 'Life_Flasks', 'flask.mana': 'Mana_Flasks', 'flask.charm': 'Charms',
-        'map.waystone': { slug: 'Waystones_top_tier', note: '只展示引路石(Top)的词缀' },
-        'map.tablet': {
-            multi: [
-                ['Breach_Tablet', '裂隙石板'], ['Expedition_Tablet', '先祖秘藏石板'],
-                ['Delirium_Tablet', '惊悸迷雾石板'], ['Ritual_Tablet', '驱灵仪式石板'],
-                ['Irradiated_Tablet', '能量辐照石板'], ['Overseer_Tablet', '霸主石板'],
-                ['Abyss_Tablet', '深渊石板'], ['Temple_Tablet', '神庙石板'],
-            ]
-        },
-        'sanctum.relic': {
-            multi: [
-                ['Urn_Relic', '壶瓮遗物'], ['Amphora_Relic', '土罐遗物'], ['Vase_Relic', '花瓶遗物'],
-                ['Seal_Relic', '封印遗物'], ['Coffer_Relic', '匣柜遗物'], ['Tapestry_Relic', '挂毯遗物'],
-                ['Incense_Relic', '熏香遗物'],
-            ]
-        },
-        'armour.helmet': { armour: 'Helmets' }, 'armour.chest': { armour: 'Body_Armours' },
-        'armour.gloves': { armour: 'Gloves' }, 'armour.boots': { armour: 'Boots' }, 'armour.shield': { armour: 'Shields' },
-    };
+    // 防具防御变体后缀 -> 显示名 / 类别 -> slug 映射，由 lib/category-map.js 提供（pob-copy 共用）
+    const { CATEGORY_MAP, ARMOUR_DEFS } = globalThis.PoE2TBCat;
 
     const SOURCE_GROUPS = [
         ['corrupted', '腐化（瓦尔宝珠）'], ['essence', '精华'],

@@ -20,6 +20,15 @@
     const itemsById = new Map();
     const orderedItems = [];
 
+    // MAIN 世界转发的 search 请求体里的类别 id（如 armour.chest）。
+    // 物品 JSON 通常不带 category 字段，靠这个兜底给 resolveSlugsByCategory 用。
+    let _lastSearchCat = null;
+    window.addEventListener('message', (e) => {
+        if (e.source !== window) return;
+        const d = e.data;
+        if (d && d.__poe2tb_search && d.category) _lastSearchCat = d.category;
+    });
+
     // ── 词典（来自 chrome.storage.local，缺失时后台下载建表）─────────────
     let DICT = null;
     let downloading = false;
@@ -31,7 +40,8 @@
     });
 
     // ── 补充词典（按 slug 缓存 poe2db 中英配对结果，主词典未命中时回填）──
-    // 仅 jewel 这一支先支持（Time-Lost 4 条命中的页都在此）；其余类型 fallback 跳过。
+    // 触发：按物品 category（CATEGORY_MAP）展开成 slug 列表预取；jewel 走 resolveJewelSlug
+    // 更精确（中文 typeLine 含基础 label，需按长度降序匹配 Time-Lost 子类型）。
     const JEWEL_SLUGS = [
         ['Ruby', '红玉'], ['Emerald', '翡翠'], ['Sapphire', '蓝玉'], ['Diamond', '宝钻'],
         ['Time-Lost_Ruby', '失落的红玉'], ['Time-Lost_Emerald', '失落的翡翠'],
@@ -39,6 +49,8 @@
     ];
     const fallbackBySlug = new Map(); // slug -> dict（不缓存 null：null 表示这次没拿到，下次重试）
     const fallbackInflight = new Map(); // slug -> Promise
+    // 当前物品解析时上下文：translateLine 在主词典未命中时遍历这些 fallback 字典
+    let activeFallbacks = [];
 
     function resolveJewelSlug(item) {
         if (!item) return null;
@@ -68,6 +80,16 @@
         return null;
     }
 
+    // 由 item.category（交易行类别 id）展开成 poe2db slug 列表。
+    // 物品 JSON 一般不带 category，用 MAIN 世界转发的 search category 兜底。
+    // 防具多变体一次性返回全部 7 个属性变体 slug —— 翻译时不知物品是哪种。
+    function resolveSlugsByCategory(item) {
+        const cat = globalThis.PoE2TBCat;
+        if (!cat) return [];
+        const id = (item && (item.category || (item.extended && item.extended.category))) || _lastSearchCat;
+        return cat.slugsForCategory(id);
+    }
+
     async function ensureFallback(slug) {
         if (!slug) return null;
         if (fallbackBySlug.has(slug)) return fallbackBySlug.get(slug);
@@ -88,6 +110,22 @@
         })();
         fallbackInflight.set(slug, p);
         return p;
+    }
+
+    // 批量预取多个 slug 的补充词典。返回去重后的字典数组（按已缓存顺序，null 跳过）。
+    // 失败的 slug 不抛错，只在 warn 里记一条；其他 slug 仍继续。
+    async function ensureSlugs(slugs) {
+        if (!Array.isArray(slugs) || !slugs.length) return [];
+        await Promise.all(slugs.map((s) => ensureFallback(s)));
+        const out = [];
+        const seen = new Set();
+        for (const s of slugs) {
+            if (seen.has(s)) continue;
+            seen.add(s);
+            const d = fallbackBySlug.get(s);
+            if (d) out.push(d);
+        }
+        return out;
     }
 
     async function ensureDict() {
@@ -181,17 +219,26 @@
                 if (tpl !== undefined) return fillTemplate(tpl, values);
             }
         }
-        // 主词典未命中：查按 slug 缓存的 poe2db 补充词典
-        if (slug && fallbackBySlug.has(slug)) {
-            const F = fallbackBySlug.get(slug);
-            if (F && zhRaw != null) {
-                const oneLine = stripMarkup(String(zhRaw)).replace(/\\n/g, '\n').replace(/[\r\n]+/g, ' ');
-                const values = oneLine.match(VAL_RE) || [];
-                for (const key of candidateKeys(oneLine)) {
-                    const tpl = F[key];
-                    if (tpl !== undefined) return fillTemplate(tpl, values);
-                }
+        // 主词典未命中：查当前物品按 category/slug 加载的 poe2db 补充词典
+        // 1) 显式 slug（jewel 精确子类型）优先
+        // 2) 其余按 activeFallbacks（buildPobText 入口时由 ensureSlugs 填好）遍历
+        const tryFb = (F) => {
+            if (!F || zhRaw == null) return null;
+            const oneLine = stripMarkup(String(zhRaw)).replace(/\\n/g, '\n').replace(/[\r\n]+/g, ' ');
+            const values = oneLine.match(VAL_RE) || [];
+            for (const key of candidateKeys(oneLine)) {
+                const tpl = F[key];
+                if (tpl !== undefined) return fillTemplate(tpl, values);
             }
+            return null;
+        };
+        if (slug && fallbackBySlug.has(slug)) {
+            const r = tryFb(fallbackBySlug.get(slug));
+            if (r != null) return r;
+        }
+        for (const F of activeFallbacks) {
+            const r = tryFb(F);
+            if (r != null) return r;
         }
         return null;
     }
@@ -244,6 +291,15 @@
 
     function buildPobText(result, slug) {
         const it = result.item || {};
+        // 把已加载的 fallback 字典按当前物品对齐到 activeFallbacks，供 translateLine 遍历。
+        // jewel 用精确 slug；其余按 category 展开的所有 slug 字典（已由 ensureSlugs 预取）。
+        const fbList = [];
+        if (slug && fallbackBySlug.has(slug)) fbList.push(fallbackBySlug.get(slug));
+        for (const s of resolveSlugsByCategory(it)) {
+            const d = fallbackBySlug.get(s);
+            if (d && !fbList.includes(d)) fbList.push(d);
+        }
+        activeFallbacks = fbList;
         const lines = [];
         const rarity = RARITY_BY_FRAME[it.frameType] || (it.name ? 'Rare' : 'Normal');
         lines.push(`Rarity: ${rarity}`);
@@ -305,6 +361,7 @@
 
         if (it.corrupted) lines.push('Corrupted');
         while (lines.length && lines[lines.length - 1] === '--------') lines.pop();
+        activeFallbacks = [];
         return lines.join('\n');
     }
 
@@ -416,9 +473,12 @@
                     if (!okDict) { flash(btn, '词典失败', false); return; }
                 }
                 const slug = resolveJewelSlug(result.item);
-                if (slug) {
+                const catSlugs = resolveSlugsByCategory(result.item);
+                // jewel 精确 slug + category 展开的 slug 一起预取；去重
+                const allSlugs = [...new Set([slug, ...catSlugs].filter(Boolean))];
+                if (allSlugs.length) {
                     btn.disabled = true; btn.textContent = '补词典…';
-                    try { await ensureFallback(slug); } catch (e) { warn('补充词典失败', slug, e); }
+                    try { await ensureSlugs(allSlugs); } catch (e) { warn('补充词典失败', allSlugs, e); }
                     btn.disabled = false; btn.textContent = btn.dataset.label;
                 }
                 const text = buildPobText(result, slug);

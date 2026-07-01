@@ -28,6 +28,7 @@
                 "https://www.pathofexile.com/trade2*"
             ],
             "js": [
+                "lib/category-map.js",
                 "content/ctx.js",
                 "content/features/history.js",
                 "content/features/favorites.js",
