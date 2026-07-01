@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "PoE2 工具箱",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "流放之路2 集市工具箱：搜索历史、收藏管理、复制PoB、查看词缀。统一侧边栏，功能可逐项开关。",
     "permissions": [
         "storage",

@@ -65,7 +65,7 @@ PoE2TB.register({
 ## 消息协议
 
 - 内容 → 后台：`ctx.sendBg({ type, ... })`（自动带 `version`）。后台 `TB.on(type, async req => ({...}))`，返回对象并入 `{success:true, ...}` 响应；抛错则 `{success:false, error}`。
-- 已有 type：历史 `SAVE/GET/DELETE/CLEAR_SEARCH_RECORD/HISTORY`；收藏 `SAVE/GET/DELETE/CLEAR_FAVORITE(S)`、`MOVE_TO_FOLDER/ROOT`、`ADD_TO_FOLDER`、`DELETE/RENAME_FOLDER`、`EXPORT/IMPORT_FOLDER`；词典 `DICT_STATUS/ENSURE/REFRESH/IMPORT`；词缀 `POE2DB_FETCH`；妄想症 `POE_NINJA_MEGALOMANIAC`、`POE_NINJA_PASSIVE_DETAILS`；`OPEN_OPTIONS`。
+- 已有 type：历史 `SAVE/GET/DELETE/CLEAR_SEARCH_RECORD/HISTORY`；收藏 `SAVE/GET/DELETE/CLEAR_FAVORITE(S)`、`MOVE_TO_FOLDER/ROOT`、`ADD_TO_FOLDER`、`DELETE/RENAME_FOLDER`、`EXPORT/IMPORT_FOLDER`；词典 `DICT_STATUS/ENSURE/REFRESH/IMPORT`；词缀 `POE2DB_FETCH`；妄想症 `POE_NINJA_MEGALOMANIAC`、`POE_NINJA_PASSIVE_DETAILS`；核心天赋英文名表 `POB_PASSIVE_ID_TO_NAME`；`OPEN_OPTIONS`。
 - MAIN → 隔离：`window.postMessage`，类型 `__poe2tb_pob`(物品) / `__poe2tb_search`(类别)。
 
 ## 各功能 scope / host 对照
@@ -102,6 +102,12 @@ PoE2TB.register({
 - 天赋详情默认 URL：`https://poe2db.tw/data/passive-skill-tree/4.5/data_cn.json`。详情以 name 匹配，展示 `stats`，购买 ID 优先用节点 `skill` 字段，缺失时才回退 `connections[0].id`。
 - 前端缓存键：`megalomaniac-last-input`（上次输入）、`megalomaniac-last-result`（上次统计结果/勾选/服务器）、`megalomaniac-passive-url`（天赋详情 URL）、`megalomaniac-passive-cache`（天赋详情数据）。
 - 购买链接 payload 需要有外层 `query`，`stats` 中保留一个空 `and` 和一个 `count`，`count.value.min` 固定为 2，只替换 `filters` 里的 `enchant.stat_2954116742|<id>`。
+
+## PoB 核心天赋英文名表（Allocates 行翻译）
+
+- 妄想症/妄想之眼等「Allocates」珠宝的 `enchantMods` 文本形如「配置 [fire58|伊柯洛塔的狱火]」：`fire58` 是 poe2db 天赋树节点的 `id`，`extended.mods.enchant[].magnitudes[].hash`「enchant.stat_2954116742|32932」里的 `32932` 是节点的 `skill`。主词典和按 base slug 建的补充词典都不收录天赋树节点，必须单独建表。
+- 后台 `background/poe-ninja.js` 的 `buildPassiveIdToName` 拉 `https://poe2db.tw/data/passive-skill-tree/4.5/data_us.json`（**英文页**，中文页 `data_cn.json` 的 `name` 是中文不能用），构建 `{ id: 英文名, skill: 英文名 }` 双索引，存 `chrome.storage.local['megalomaniac-passive-id2name']`，TTL 14 天，type 为 `POB_PASSIVE_ID_TO_NAME`。
+- 内容脚本 `pob-copy.js` 的 `translateAllocateLine` 优先用文本里的 statKeyId（`fire58`）查，命中不到再用 `extractEnchantSkillIds` 抽出的数字 skill id 兜底；命中则输出 PoB 标准的「Allocates <英文名> (enchant)」，未命中走原「未翻译」兜底。
 - 本地调试脚本：`node tools/poe-ninja-megalomaniac.mjs "<poe.ninja builds 链接>" 20`。该脚本使用 `statics/lang-sc.json` 便于本地调试，插件运行时仍走 PoB 词典缓存。
 
 ## 真机待调点（调不通先看这里）

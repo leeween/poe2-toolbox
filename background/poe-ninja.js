@@ -8,6 +8,12 @@ const POE_NINJA_MIN_LIMIT = 10;
 const POE_NINJA_MAX_LIMIT = 100;
 const POE_NINJA_CHARACTER_DELAY_MS = 1200;
 
+// 英文页天赋树 JSON：用于把妄想症 enchantMods 里的核心天赋 id 反查成英文名。
+// 中文页 data_cn.json 的节点 name 是中文，不能直接给英文名；data_us.json 才是英文。
+const POE2DB_PASSIVE_EN_URL = 'https://poe2db.tw/data/passive-skill-tree/4.5/data_us.json';
+const PASSIVE_ID2NAME_KEY = 'megalomaniac-passive-id2name';
+const PASSIVE_ID2NAME_TTL = 14 * 24 * 60 * 60 * 1000;
+
 let _enToZhDict = null;
 let _enToZhBuiltAt = 0;
 
@@ -347,3 +353,35 @@ async function analyzeMegalomaniac(req) {
 
 TB.on('POE_NINJA_MEGALOMANIAC', analyzeMegalomaniac);
 TB.on('POE_NINJA_PASSIVE_DETAILS', fetchPassiveDetails);
+
+// 英文页天赋树 -> { id: 英文名, skill: 英文名 } 双索引（双 key 命中任一即可）。
+// 物品 enchantMods 文本「配置 [fire58|伊柯洛塔的狱火]」里的 fire58 是 node.id；
+// extended.mods.enchant[].magnitudes[].hash「enchant.stat_2954116742|32932」里的 32932 是 node.skill。
+// 两者都建进索引，前台按文本里的 statKeyId 优先查、数字 skill id 兜底。
+async function buildPassiveIdToName() {
+    const data = await fetchJson(POE2DB_PASSIVE_EN_URL);
+    const nodesRaw = data && data.nodes;
+    const nodes = Array.isArray(nodesRaw) ? nodesRaw : Object.values(nodesRaw || {});
+    const out = {};
+    for (const node of nodes) {
+        if (!node || typeof node.name !== 'string' || !node.name) continue;
+        if (typeof node.id === 'string' && node.id) out[node.id] = node.name;
+        if (node.skill != null) out[String(node.skill)] = node.name;
+    }
+    return out;
+}
+
+async function getPassiveIdToName() {
+    const { [PASSIVE_ID2NAME_KEY]: cached } = await chrome.storage.local.get({ [PASSIVE_ID2NAME_KEY]: null });
+    if (cached && cached.map && Date.now() - cached.t < PASSIVE_ID2NAME_TTL) return cached.map;
+    try {
+        const map = await buildPassiveIdToName();
+        await chrome.storage.local.set({ [PASSIVE_ID2NAME_KEY]: { t: Date.now(), map } });
+        return map;
+    } catch (e) {
+        if (cached && cached.map) return cached.map;
+        throw e;
+    }
+}
+
+TB.on('POB_PASSIVE_ID_TO_NAME', async () => ({ map: await getPassiveIdToName() }));

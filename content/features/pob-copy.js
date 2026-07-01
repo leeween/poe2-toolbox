@@ -151,6 +151,57 @@
         return false;
     }
 
+    // ── 核心天赋 id → 英文名（poe2db 英文页 data_us.json）──────────────
+    // 妄想症/妄想之眼等「Allocates」类珠宝的 enchantMods 形如「配置 [fire58|伊柯洛塔的狱火]」，
+    // 主词典不收录核心天赋名，poe2db ModsView（按 base slug 建的 fallback）也不含天赋树节点。
+    // 这里用文本里的 statKeyId（fire58）+ extended.mods.enchant 里的数字 skill id（32932）
+    // 双路径查 poe2db 英文页天赋树 JSON，命中则输出 PoB 标准的「Allocates <英文名> (enchant)」。
+    let passiveId2Name = null;
+    let passiveLoading = false;
+    async function ensurePassiveId2Name() {
+        if (passiveId2Name) return passiveId2Name;
+        if (passiveLoading) return null;
+        passiveLoading = true;
+        try {
+            const resp = await ctx.sendBg({ type: 'POB_PASSIVE_ID_TO_NAME' });
+            if (resp && resp.success && resp.map) passiveId2Name = resp.map;
+        } catch (e) { warn('核心天赋英文名表加载失败', e); }
+        finally { passiveLoading = false; }
+        return passiveId2Name;
+    }
+
+    // 从物品 extended.mods.enchant 提取数字 skill id 列表（与 enchantMods 同序对齐）。
+    // hash 形如「enchant.stat_2954116742|32932」——「|」后的数字就是 poe2db 节点的 skill 字段。
+    function extractEnchantSkillIds(item) {
+        const mods = item && item.extended && item.extended.mods;
+        const arr = mods && Array.isArray(mods.enchant) ? mods.enchant : [];
+        const ids = [];
+        for (const e of arr) {
+            const mags = e && Array.isArray(e.magnitudes) ? e.magnitudes : [];
+            for (const m of mags) {
+                const h = typeof m === 'string' ? m : (m && m.hash);
+                if (typeof h !== 'string') { ids.push(null); continue; }
+                const i = h.lastIndexOf('|');
+                ids.push(i >= 0 ? h.slice(i + 1) : null);
+            }
+        }
+        return ids;
+    }
+
+    // 把「配置 [fire58|伊柯洛塔的狱火]」翻译成「Allocates Ichlotl's Inferno」。
+    // 命中不到时返回 null，调用方走原 fallback / 「未翻译」兜底。
+    function translateAllocateLine(rawText, skillId) {
+        if (typeof rawText !== 'string') return null;
+        const m = rawText.match(/^配置\s*\[([^|\]]+)\|([^\]]+)\]/);
+        if (!m) return null;
+        const map = passiveId2Name;
+        if (!map) return null;
+        const statKeyId = m[1].trim();
+        const zhName = m[2].trim();
+        const enName = map[statKeyId] || (skillId ? map[String(skillId)] : null);
+        return enName ? `Allocates ${enName}` : null;
+    }
+
     // ── 1) 接收 MAIN 世界转发的物品数据 ──────────────────────────────
     function ingestFetchPayload(json) {
         try {
@@ -266,13 +317,17 @@
         }
         return '';
     }
-    function translateMods(arr, suffix, slug) {
+    function translateMods(arr, suffix, slug, opts) {
         if (!Array.isArray(arr)) return [];
+        const skillIds = opts && Array.isArray(opts.enchantSkillIds) ? opts.enchantSkillIds : null;
         const out = [];
-        for (const raw of arr) {
+        for (let i = 0; i < arr.length; i++) {
+            const raw = arr[i];
             const text = modText(raw);
             if (!text) continue; // 对象提取不到文本：跳过，不再输出 [object Object]
-            const en = translateLine(text, slug);
+            // 核心天赋「配置 [key|zhName]」行：优先用 id→英文名 表翻成 Allocates <英文名>
+            const alloc = (opts && opts.isEnchant) ? translateAllocateLine(text, skillIds ? skillIds[i] : null) : null;
+            const en = alloc != null ? alloc : translateLine(text, slug);
             const line = en != null ? en : `${text.replace(/[\r\n]+/g, ' ')}  「未翻译」`;
             for (const seg of line.split('\n')) out.push(suffix ? `${seg} ${suffix}` : seg);
         }
@@ -344,7 +399,11 @@
         const SKIP = new Set(['pseudoMods']);
 
         const topLines = [];
-        for (const f of TOP) topLines.push(...translateMods(it[f], SUFFIX[f] || '', slug));
+        const enchantSkillIds = extractEnchantSkillIds(it);
+        for (const f of TOP) {
+            const isEnchant = f === 'enchantMods';
+            topLines.push(...translateMods(it[f], SUFFIX[f] || '', slug, isEnchant ? { isEnchant, enchantSkillIds } : null));
+        }
         if (topLines.length) { lines.push(...topLines); lines.push('--------'); }
 
         const mainLines = [];
@@ -480,6 +539,10 @@
                     btn.disabled = true; btn.textContent = '补词典…';
                     try { await ensureSlugs(allSlugs); } catch (e) { warn('补充词典失败', allSlugs, e); }
                     btn.disabled = false; btn.textContent = btn.dataset.label;
+                }
+                // 核心天赋英文名表（Allocates 行用）。有就预取，失败不阻塞。
+                if (!passiveId2Name) {
+                    try { await ensurePassiveId2Name(); } catch (e) { warn('核心天赋表加载失败', e); }
                 }
                 const text = buildPobText(result, slug);
                 if (CONFIG.debug) console.log('[PoB] 生成文本:\n' + text);
