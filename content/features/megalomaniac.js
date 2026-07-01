@@ -11,6 +11,7 @@
     const PASSIVE_URL_KEY = 'megalomaniac-passive-url';
     const PASSIVE_CACHE_KEY = 'megalomaniac-passive-cache';
     const DEFAULT_PASSIVE_URL = 'https://poe2db.tw/data/passive-skill-tree/4.5/data_cn.json';
+    const DEFAULT_NINJA_URL = 'https://poe.ninja/poe2/builds/runesofaldur?items=Megalomaniac';
     const DEFAULT_LIMIT = 20;
     const BUY_BASES = {
         cn: 'https://poe.game.qq.com/trade2/search/poe2/奥杜尔秘符?q=',
@@ -50,6 +51,7 @@
                     <div class="tb-dialog-body">
                         <label class="tb-dialog-label">poe.ninja 链接</label>
                         <input type="text" class="tb-dialog-input tb-mg-url" placeholder="https://poe.ninja/poe2/builds/...">
+                        <div class="tb-mg-hint">默认值是全职业使用妄想症的默认排序，建议选择职业并且设定好排序后将链接填入。</div>
                         <label class="tb-dialog-label tb-mg-count-label">账号数量</label>
                         <input type="number" min="10" max="100" step="1" class="tb-dialog-input tb-mg-limit">
                         <div class="tb-mg-error"></div>
@@ -95,7 +97,7 @@
         } catch (e) {
             lastInput = null;
         }
-        return lastInput || { url: '', limit: DEFAULT_LIMIT };
+        return lastInput || { url: DEFAULT_NINJA_URL, limit: DEFAULT_LIMIT };
     }
 
     async function saveLastInput(input) {

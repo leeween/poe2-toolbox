@@ -947,6 +947,13 @@ body.tb-active.tb-collapsed {
     margin-top: 12px;
 }
 
+.tb-mg-hint {
+    margin-top: 6px;
+    color: var(--tb-text-dim);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
 .tb-mg-error {
     min-height: 18px;
     margin-top: 8px;
