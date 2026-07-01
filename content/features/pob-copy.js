@@ -283,6 +283,9 @@
         };
         const TOP = ['enchantMods', 'scourgeMods', 'implicitMods'];
         const known = new Set(Object.keys(SUFFIX).concat(TOP));
+        // pseudoMods 是国服集市 UI 的加权求和面板数据（如「Sum: 41.5」「+42% 总闪电抗性」），
+        // 不是真实词缀，PoB 不需要，显式跳过。
+        const SKIP = new Set(['pseudoMods']);
 
         const topLines = [];
         for (const f of TOP) topLines.push(...translateMods(it[f], SUFFIX[f] || '', slug));
@@ -293,7 +296,7 @@
             mainLines.push(...translateMods(it[f], SUFFIX[f] || '', slug));
         }
         for (const f of Object.keys(it)) {
-            if (/Mods$/.test(f) && !known.has(f) && Array.isArray(it[f])) {
+            if (/Mods$/.test(f) && !known.has(f) && !SKIP.has(f) && Array.isArray(it[f])) {
                 if (CONFIG.debug) log('额外词缀字段', f, it[f]);
                 mainLines.push(...translateMods(it[f], '', slug));
             }
