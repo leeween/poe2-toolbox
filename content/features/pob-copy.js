@@ -30,6 +30,66 @@
         if (area === 'local' && ch['pob-dict'] && ch['pob-dict'].newValue) DICT = ch['pob-dict'].newValue;
     });
 
+    // ── 补充词典（按 slug 缓存 poe2db 中英配对结果，主词典未命中时回填）──
+    // 仅 jewel 这一支先支持（Time-Lost 4 条命中的页都在此）；其余类型 fallback 跳过。
+    const JEWEL_SLUGS = [
+        ['Ruby', '红玉'], ['Emerald', '翡翠'], ['Sapphire', '蓝玉'], ['Diamond', '宝钻'],
+        ['Time-Lost_Ruby', '失落的红玉'], ['Time-Lost_Emerald', '失落的翡翠'],
+        ['Time-Lost_Sapphire', '失落的蓝玉'], ['Time-Lost_Diamond', '失落的宝钻'],
+    ];
+    const fallbackBySlug = new Map(); // slug -> dict（不缓存 null：null 表示这次没拿到，下次重试）
+    const fallbackInflight = new Map(); // slug -> Promise
+
+    function resolveJewelSlug(item) {
+        if (!item) return null;
+        // typeLine 是中文显示名（如「失落的翡翠」），baseType 可能是英文 base name（如「Time-Lost Emerald」）。
+        // 两个都查；同时直接匹配英文 slug（如「Time-Lost_Emerald」/「Time-Lost Emerald」）。
+        // 注意：Time-Lost 系列的中文 label 含基础 label（如「失落的翡翠」含「翡翠」），
+        // 必须按 label 长度降序匹配，否则会误配到普通款（Emerald 而非 Time-Lost_Emerald）。
+        const sorted = JEWEL_SLUGS.slice().sort((a, b) => b[1].length - a[1].length);
+        const candidates = [
+            String(item.typeLine || ''),
+            String(item.baseType || ''),
+            String(item.name || ''),
+        ].filter(Boolean);
+        for (const c of candidates) {
+            for (const [slug, label] of sorted) {
+                if (c.includes(label)) return slug;
+            }
+        }
+        // 英文 base name 直配 slug：把空格/下划线统一后比对
+        const norm = (s) => s.toLowerCase().replace(/[_\s]+/g, '');
+        for (const c of candidates) {
+            const cn = norm(c);
+            for (const [slug] of sorted) {
+                if (cn === norm(slug)) return slug;
+            }
+        }
+        return null;
+    }
+
+    async function ensureFallback(slug) {
+        if (!slug) return null;
+        if (fallbackBySlug.has(slug)) return fallbackBySlug.get(slug);
+        if (fallbackInflight.has(slug)) return fallbackInflight.get(slug);
+        const p = (async () => {
+            try {
+                await ctx.sendBg({ type: 'POB_FALLBACK_ENSURE', slug });
+                const get = await ctx.sendBg({ type: 'POB_FALLBACK_GET', slug });
+                const d = (get && get.success && get.dict) ? get.dict : null;
+                if (d) fallbackBySlug.set(slug, d); // 只缓存成功结果；null 不缓存，下次重试
+                return d;
+            } catch (e) {
+                warn('补充词典失败', slug, e);
+                return null;
+            } finally {
+                fallbackInflight.delete(slug);
+            }
+        })();
+        fallbackInflight.set(slug, p);
+        return p;
+    }
+
     async function ensureDict() {
         if (DICT) return true;
         try {
@@ -111,14 +171,27 @@
             return val;
         });
     }
-    function translateLine(zhRaw) {
+    function translateLine(zhRaw, slug) {
         const D = dict();
-        if (!D || zhRaw == null) return null;
-        const oneLine = stripMarkup(String(zhRaw)).replace(/\\n/g, '\n').replace(/[\r\n]+/g, ' ');
-        const values = oneLine.match(VAL_RE) || [];
-        for (const key of candidateKeys(oneLine)) {
-            const tpl = D[key];
-            if (tpl !== undefined) return fillTemplate(tpl, values);
+        if (D && zhRaw != null) {
+            const oneLine = stripMarkup(String(zhRaw)).replace(/\\n/g, '\n').replace(/[\r\n]+/g, ' ');
+            const values = oneLine.match(VAL_RE) || [];
+            for (const key of candidateKeys(oneLine)) {
+                const tpl = D[key];
+                if (tpl !== undefined) return fillTemplate(tpl, values);
+            }
+        }
+        // 主词典未命中：查按 slug 缓存的 poe2db 补充词典
+        if (slug && fallbackBySlug.has(slug)) {
+            const F = fallbackBySlug.get(slug);
+            if (F && zhRaw != null) {
+                const oneLine = stripMarkup(String(zhRaw)).replace(/\\n/g, '\n').replace(/[\r\n]+/g, ' ');
+                const values = oneLine.match(VAL_RE) || [];
+                for (const key of candidateKeys(oneLine)) {
+                    const tpl = F[key];
+                    if (tpl !== undefined) return fillTemplate(tpl, values);
+                }
+            }
         }
         return null;
     }
@@ -146,13 +219,13 @@
         }
         return '';
     }
-    function translateMods(arr, suffix) {
+    function translateMods(arr, suffix, slug) {
         if (!Array.isArray(arr)) return [];
         const out = [];
         for (const raw of arr) {
             const text = modText(raw);
             if (!text) continue; // 对象提取不到文本：跳过，不再输出 [object Object]
-            const en = translateLine(text);
+            const en = translateLine(text, slug);
             const line = en != null ? en : `${text.replace(/[\r\n]+/g, ' ')}  「未翻译」`;
             for (const seg of line.split('\n')) out.push(suffix ? `${seg} ${suffix}` : seg);
         }
@@ -161,15 +234,15 @@
     function titleCase(s) {
         return s.replace(/\b([a-z])([a-z']*)/g, (_, a, b) => a.toUpperCase() + b);
     }
-    function translateName(zhRaw) {
-        const en = translateLine(zhRaw);
+    function translateName(zhRaw, slug) {
+        const en = translateLine(zhRaw, slug);
         return en != null ? titleCase(en) : String(zhRaw || '');
     }
 
     // ── 3) 由物品对象拼 PoB 导入文本 ─────────────────────────────────
     const RARITY_BY_FRAME = { 0: 'Normal', 1: 'Magic', 2: 'Rare', 3: 'Unique', 9: 'Relic' };
 
-    function buildPobText(result) {
+    function buildPobText(result, slug) {
         const it = result.item || {};
         const lines = [];
         const rarity = RARITY_BY_FRAME[it.frameType] || (it.name ? 'Rare' : 'Normal');
@@ -177,9 +250,9 @@
 
         const price = result.listing && result.listing.price;
         if (price && price.amount != null) lines.push(`${price.amount} ${price.currency || ''}`.trim());
-        else if (it.name) lines.push(translateName(it.name));
+        else if (it.name) lines.push(translateName(it.name, slug));
 
-        const base = translateName(it.baseType || it.typeLine || '');
+        const base = translateName(it.baseType || it.typeLine || '', slug);
         if (base) lines.push(base);
         lines.push('--------');
 
@@ -195,7 +268,7 @@
         if (Array.isArray(it.requirements) && it.requirements.length) {
             lines.push('Requirements:');
             for (const req of it.requirements) {
-                const nm = translateName(req.name || '');
+                const nm = translateName(req.name || '', slug);
                 const v = req.values && req.values[0] && req.values[0][0];
                 if (v != null) lines.push(`${nm}: ${v}`);
             }
@@ -212,17 +285,17 @@
         const known = new Set(Object.keys(SUFFIX).concat(TOP));
 
         const topLines = [];
-        for (const f of TOP) topLines.push(...translateMods(it[f], SUFFIX[f] || ''));
+        for (const f of TOP) topLines.push(...translateMods(it[f], SUFFIX[f] || '', slug));
         if (topLines.length) { lines.push(...topLines); lines.push('--------'); }
 
         const mainLines = [];
         for (const f of ['runeMods', 'fracturedMods', 'explicitMods', 'craftedMods']) {
-            mainLines.push(...translateMods(it[f], SUFFIX[f] || ''));
+            mainLines.push(...translateMods(it[f], SUFFIX[f] || '', slug));
         }
         for (const f of Object.keys(it)) {
             if (/Mods$/.test(f) && !known.has(f) && Array.isArray(it[f])) {
                 if (CONFIG.debug) log('额外词缀字段', f, it[f]);
-                mainLines.push(...translateMods(it[f], ''));
+                mainLines.push(...translateMods(it[f], '', slug));
             }
         }
         if (mainLines.length) { lines.push(...mainLines); lines.push('--------'); }
@@ -339,7 +412,13 @@
                     btn.disabled = false; btn.textContent = btn.dataset.label;
                     if (!okDict) { flash(btn, '词典失败', false); return; }
                 }
-                const text = buildPobText(result);
+                const slug = resolveJewelSlug(result.item);
+                if (slug) {
+                    btn.disabled = true; btn.textContent = '补词典…';
+                    try { await ensureFallback(slug); } catch (e) { warn('补充词典失败', slug, e); }
+                    btn.disabled = false; btn.textContent = btn.dataset.label;
+                }
+                const text = buildPobText(result, slug);
                 if (CONFIG.debug) console.log('[PoB] 生成文本:\n' + text);
                 const ok = await copyText(text);
                 flash(btn, ok ? '已复制√' : '复制失败', ok);

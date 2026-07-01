@@ -11,10 +11,13 @@ importScripts(
     '../lib/lz-string.js',
     '../lib/dict-normalize.js',
     '../lib/dict-build.js',
+    '../lib/poe2db-parse.js',
+    '../lib/pob-fallback-build.js',
     'storage.js',
     'favorites.js',
     'dict.js',
     'poe2db.js',
+    'pob-fallback.js',
     'poe-ninja.js'
 );
 
