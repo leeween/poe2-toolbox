@@ -34,10 +34,14 @@
     let downloading = false;
     function dict() { return DICT; }
 
-    chrome.storage.local.get('pob-dict').then((r) => { if (r && r['pob-dict']) DICT = r['pob-dict']; });
-    chrome.storage.onChanged.addListener((ch, area) => {
-        if (area === 'local' && ch['pob-dict'] && ch['pob-dict'].newValue) DICT = ch['pob-dict'].newValue;
-    });
+    try {
+        chrome.storage.local.get('pob-dict')
+            .then((r) => { if (r && r['pob-dict']) DICT = r['pob-dict']; })
+            .catch(() => { });
+        chrome.storage.onChanged.addListener((ch, area) => {
+            if (area === 'local' && ch['pob-dict'] && ch['pob-dict'].newValue) DICT = ch['pob-dict'].newValue;
+        });
+    } catch (e) { /* extension context invalidated */ }
 
     // ── 补充词典（按 slug 缓存 poe2db 中英配对结果，主词典未命中时回填）──
     // 触发：按物品 category（CATEGORY_MAP）展开成 slug 列表预取；jewel 走 resolveJewelSlug
@@ -325,8 +329,9 @@
             const raw = arr[i];
             const text = modText(raw);
             if (!text) continue; // 对象提取不到文本：跳过，不再输出 [object Object]
-            // 核心天赋「配置 [key|zhName]」行：优先用 id→英文名 表翻成 Allocates <英文名>
-            const alloc = (opts && opts.isEnchant) ? translateAllocateLine(text, skillIds ? skillIds[i] : null) : null;
+            // 核心天赋「配置 [key|zhName]」行可能出现在 enchantMods，也可能被接口归到 explicitMods 等字段。
+            // 所有词缀行都先尝试按 key 翻译；enchantMods 额外传 skill id 兜底。
+            const alloc = translateAllocateLine(text, skillIds ? skillIds[i] : null);
             const en = alloc != null ? alloc : translateLine(text, slug);
             const line = en != null ? en : `${text.replace(/[\r\n]+/g, ' ')}  「未翻译」`;
             for (const seg of line.split('\n')) out.push(suffix ? `${seg} ${suffix}` : seg);
@@ -402,7 +407,7 @@
         const enchantSkillIds = extractEnchantSkillIds(it);
         for (const f of TOP) {
             const isEnchant = f === 'enchantMods';
-            topLines.push(...translateMods(it[f], SUFFIX[f] || '', slug, isEnchant ? { isEnchant, enchantSkillIds } : null));
+            topLines.push(...translateMods(it[f], SUFFIX[f] || '', slug, isEnchant ? { enchantSkillIds } : null));
         }
         if (topLines.length) { lines.push(...topLines); lines.push('--------'); }
 
