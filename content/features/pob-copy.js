@@ -192,6 +192,21 @@
         return ids;
     }
 
+    // 从 extended.hashes.explicit 提取数字 skill id 列表（与 explicitMods 同序对齐）。
+    // 无根之源这类物品的 extended.mods 是空的，但 extended.hashes.explicit 里有
+    // 「["explicit.stat_2422708892|25520", [0]]」——第二个 | 后的数字是核心天赋 skill id。
+    function extractExplicitSkillIds(item) {
+        const hashes = item && item.extended && item.extended.hashes;
+        const arr = hashes && Array.isArray(hashes.explicit) ? hashes.explicit : [];
+        const ids = [];
+        for (const h of arr) {
+            if (!Array.isArray(h) || typeof h[0] !== 'string') { ids.push(null); continue; }
+            const i = h[0].lastIndexOf('|');
+            ids.push(i >= 0 ? h[0].slice(i + 1) : null);
+        }
+        return ids;
+    }
+
     // 把「配置 [fire58|伊柯洛塔的狱火]」翻译成「Allocates Ichlotl's Inferno」。
     // 命中不到时返回 null，调用方走原 fallback / 「未翻译」兜底。
     function translateAllocateLine(rawText, skillId) {
@@ -204,6 +219,21 @@
         const zhName = m[2].trim();
         const enName = map[statKeyId] || (skillId ? map[String(skillId)] : null);
         return enName ? `Allocates ${enName}` : null;
+    }
+
+    // 无根之源（From Nothing）固定模板：
+    // 「[passive_keystone_X|Y]范围内的天赋可以在 未连结至天赋树的情况下配置」
+    // → 「Passives in Radius of <EnName> can be Allocated without being connected to your tree」
+    // Y 是 30 个核心天赋之一的中文名；用 explicit hash 后缀的 skill id 查 passiveId2Name
+    // 拿英文名（与 Allocates 行复用同一张表）。命中不到时保留中文，仍输出整行模板。
+    function translateFromNothingLine(rawText, skillId) {
+        if (typeof rawText !== 'string') return null;
+        const m = rawText.match(/\[([^|\]]+)\|([^\]]+)\]\s*范围内的天赋可以在\s*未连结至天赋树的情况下配置/);
+        if (!m) return null;
+        const zhName = m[2].trim();
+        const map = passiveId2Name;
+        const enName = (map && skillId && map[String(skillId)]) || zhName;
+        return `Passives in Radius of ${enName} can be Allocated without being connected to your tree`;
     }
 
     // ── 1) 接收 MAIN 世界转发的物品数据 ──────────────────────────────
@@ -332,7 +362,13 @@
             // 核心天赋「配置 [key|zhName]」行可能出现在 enchantMods，也可能被接口归到 explicitMods 等字段。
             // 所有词缀行都先尝试按 key 翻译；enchantMods 额外传 skill id 兜底。
             const alloc = translateAllocateLine(text, skillIds ? skillIds[i] : null);
-            const en = alloc != null ? alloc : translateLine(text, slug);
+            // 无根之源模板：用 explicit hash 里的 skill id 翻译核心天赋名
+            const fromNothing = alloc == null
+                ? translateFromNothingLine(text, skillIds ? skillIds[i] : null)
+                : null;
+            const en = alloc != null ? alloc
+                : fromNothing != null ? fromNothing
+                : translateLine(text, slug);
             const line = en != null ? en : `${text.replace(/[\r\n]+/g, ' ')}  「未翻译」`;
             for (const seg of line.split('\n')) out.push(suffix ? `${seg} ${suffix}` : seg);
         }
@@ -412,8 +448,10 @@
         if (topLines.length) { lines.push(...topLines); lines.push('--------'); }
 
         const mainLines = [];
+        const explicitSkillIds = extractExplicitSkillIds(it);
         for (const f of ['runeMods', 'fracturedMods', 'explicitMods', 'craftedMods']) {
-            mainLines.push(...translateMods(it[f], SUFFIX[f] || '', slug));
+            const isExplicit = f === 'explicitMods';
+            mainLines.push(...translateMods(it[f], SUFFIX[f] || '', slug, isExplicit ? { enchantSkillIds: explicitSkillIds } : null));
         }
         for (const f of Object.keys(it)) {
             if (/Mods$/.test(f) && !known.has(f) && !SKIP.has(f) && Array.isArray(it[f])) {

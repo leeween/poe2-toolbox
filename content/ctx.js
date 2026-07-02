@@ -48,47 +48,72 @@
         }
     }
 
+    function runtimeLastErrorMessage() {
+        try {
+            const err = chrome && chrome.runtime && chrome.runtime.lastError;
+            return err ? (err.message || String(err)) : '';
+        } catch (e) {
+            return String(e && e.message || e);
+        }
+    }
+
+    function localStorageApi() {
+        try {
+            return extensionAlive() && chrome.storage && chrome.storage.local ? chrome.storage.local : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function storageGet(query) {
+        return new Promise((resolve) => {
+            const api = localStorageApi();
+            if (!api) { resolve(null); return; }
+            try {
+                api.get(query, (res) => {
+                    if (runtimeLastErrorMessage()) { resolve(null); return; }
+                    resolve(res || null);
+                });
+            } catch (e) {
+                resolve(null);
+            }
+        });
+    }
+
+    function storageSet(items) {
+        return new Promise((resolve) => {
+            const api = localStorageApi();
+            if (!api) { resolve(false); return; }
+            try {
+                api.set(items, () => {
+                    if (runtimeLastErrorMessage()) { resolve(false); return; }
+                    resolve(true);
+                });
+            } catch (e) {
+                resolve(false);
+            }
+        });
+    }
+
     // ── 存储助手 ──────────────────────────────────────────────────────
     // 版本化键：poe2- 前缀，与旧插件 schema 保持一致，便于数据互通。
     const storage = {
         vkey(name) { return `${version}-${name}`; },
         async get(name, def) {
-            if (!extensionAlive()) return def;
             const k = this.vkey(name);
-            try {
-                const r = await chrome.storage.local.get({ [k]: def });
-                return r[k];
-            } catch (e) {
-                return def;
-            }
+            const r = await storageGet({ [k]: def });
+            return r && Object.prototype.hasOwnProperty.call(r, k) ? r[k] : def;
         },
         async set(name, val) {
-            if (!extensionAlive()) return false;
-            try {
-                await chrome.storage.local.set({ [this.vkey(name)]: val });
-                return true;
-            } catch (e) {
-                return false;
-            }
+            return storageSet({ [this.vkey(name)]: val });
         },
         // 非版本化（全局）键
         async getRaw(key, def) {
-            if (!extensionAlive()) return def;
-            try {
-                const r = await chrome.storage.local.get({ [key]: def });
-                return r[key];
-            } catch (e) {
-                return def;
-            }
+            const r = await storageGet({ [key]: def });
+            return r && Object.prototype.hasOwnProperty.call(r, key) ? r[key] : def;
         },
         async setRaw(key, val) {
-            if (!extensionAlive()) return false;
-            try {
-                await chrome.storage.local.set({ [key]: val });
-                return true;
-            } catch (e) {
-                return false;
-            }
+            return storageSet({ [key]: val });
         },
     };
 
@@ -107,13 +132,22 @@
     }
 
     // ── 后台消息 ──────────────────────────────────────────────────────
-    async function sendBg(msg) {
-        if (!extensionAlive()) return { success: false, error: 'Extension context invalidated' };
-        try {
-            return await chrome.runtime.sendMessage({ version, ...msg });
-        } catch (e) {
-            return { success: false, error: String(e && e.message || e) };
-        }
+    function sendBg(msg) {
+        return new Promise((resolve) => {
+            if (!extensionAlive()) { resolve({ success: false, error: 'Extension context invalidated' }); return; }
+            try {
+                chrome.runtime.sendMessage({ version, ...msg }, (resp) => {
+                    const err = runtimeLastErrorMessage();
+                    if (err) {
+                        resolve({ success: false, error: err });
+                        return;
+                    }
+                    resolve(resp);
+                });
+            } catch (e) {
+                resolve({ success: false, error: String(e && e.message || e) });
+            }
+        });
     }
 
     // ── 交易搜索参数解析（history / favorites 共用）─────────────────────
