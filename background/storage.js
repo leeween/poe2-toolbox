@@ -54,10 +54,14 @@ function cleanupOldRecords() {
     chrome.storage.local.remove('poe1-searchHistory');
 }
 
-chrome.alarms.create('cleanupOldRecords', { delayInMinutes: 1, periodInMinutes: 24 * 60 });
-chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === 'cleanupOldRecords') cleanupOldRecords();
-});
+if (chrome.alarms && chrome.alarms.create && chrome.alarms.onAlarm) {
+    chrome.alarms.create('cleanupOldRecords', { delayInMinutes: 1, periodInMinutes: 24 * 60 });
+    chrome.alarms.onAlarm.addListener((alarm) => {
+        if (alarm.name === 'cleanupOldRecords') cleanupOldRecords();
+    });
+} else {
+    cleanupOldRecords();
+}
 
 // 供其它后台模块复用
 self.TB_vkey = vkey;
