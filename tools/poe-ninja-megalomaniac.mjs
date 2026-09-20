@@ -112,20 +112,50 @@ function parseSearchRows(bytes) {
 
     let total = 0;
     const valueLists = [];
+    const columns = new Map();
     for (const field of readFields(resultField.value)) {
-        if (field.no === 1 && field.wire === 0) total = field.value;
-        if (field.no === 5 && field.wire === 2) valueLists.push(parseValueList(field.value));
+        if (field.no === 1 && field.wire === 0) {
+            total = field.value;
+        } else if (field.no === 5 && field.wire === 2) {
+            valueLists.push(parseValueList(field.value));
+        } else if (field.no === 12 && field.wire === 2) {
+            const sub = readFields(field.value);
+            const idField = sub.find((s) => s.no === 1 && s.wire === 2);
+            if (idField) {
+                const id = protobufString(idField.value);
+                const vals = sub
+                    .filter((s) => s.no === 7 && s.wire === 2)
+                    .map((s) => protobufString(s.value));
+                columns.set(id, vals);
+            }
+        }
     }
 
-    const names = valueLists.find((list) => list.id === 'name');
-    const accounts = valueLists.find((list) => list.id === 'account');
-    if (!names || !accounts) throw new Error('search 返回缺少 name/account 列');
+    let namesList = [];
+    let accountsList = [];
+    if (columns.has('name') && columns.has('account')) {
+        namesList = columns.get('name') || [];
+        accountsList = columns.get('account') || [];
+    } else {
+        const names = valueLists.find((list) => list.id === 'name');
+        const accounts = valueLists.find((list) => list.id === 'account');
+        if (names && accounts) {
+            const l = Math.min(names.values.length, accounts.values.length);
+            for (let i = 0; i < l; i++) {
+                namesList.push(names.values[i]?.str || '');
+                accountsList.push(accounts.values[i]?.str || '');
+            }
+        }
+    }
 
-    const len = Math.min(names.values.length, accounts.values.length);
+    if (total === 0) throw new Error('未找到符合当前筛选条件的构筑角色');
+    if (!namesList.length || !accountsList.length) throw new Error('search 返回缺少 name/account 列');
+
+    const len = Math.min(namesList.length, accountsList.length);
     const rows = [];
     for (let i = 0; i < len; i++) {
-        const name = names.values[i]?.str;
-        const account = accounts.values[i]?.str;
+        const name = namesList[i];
+        const account = accountsList[i];
         if (name && account) rows.push({ index: i, account, name });
     }
     return { total, rows };
@@ -141,8 +171,17 @@ function normalizeEnglish(text) {
     return globalThis.PoE2Norm.makeEnTemplate(stripMarkup(text)).toLowerCase();
 }
 
+function parseNotable(enchantMod) {
+    const text = String(enchantMod || '').replace(/^allocates\s+/i, '').trim();
+    const match = text.match(/^\[([^\[\]|]*)\|([^\[\]]*)\]$/);
+    if (match) {
+        return { id: match[1].trim(), en: match[2].trim() };
+    }
+    return { id: '', en: stripMarkup(text) };
+}
+
 function extractNotable(enchantMod) {
-    return stripMarkup(enchantMod).replace(/^allocates\s+/i, '').trim();
+    return parseNotable(enchantMod).en;
 }
 
 function displayZhKey(key) {

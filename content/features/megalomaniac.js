@@ -10,7 +10,9 @@
     const RESULT_CACHE_KEY = 'megalomaniac-last-result';
     const PASSIVE_URL_KEY = 'megalomaniac-passive-url';
     const PASSIVE_CACHE_KEY = 'megalomaniac-passive-cache';
-    const DEFAULT_PASSIVE_URL = 'https://poe2db.tw/data/passive-skill-tree/4.5/data_cn.json';
+    const DEFAULT_PASSIVE_URL = ctx.isIntl
+        ? 'https://poe2db.tw/data/passive-skill-tree/4.5/data_tw.json'
+        : 'https://poe2db.tw/data/passive-skill-tree/4.5/data_cn.json';
     const DEFAULT_NINJA_URL = 'https://poe.ninja/poe2/builds/runesofaldur?items=Megalomaniac';
     const DEFAULT_LIMIT = 20;
     const BUY_BASES = {
@@ -141,18 +143,29 @@
         try { await ctx.storage.set(PASSIVE_URL_KEY, passiveUrl); } catch (e) { /* ignore */ }
     }
 
-    function passiveDetail(name) {
-        const detail = passiveDetails && passiveDetails[name];
-        if (!detail) return { id: '', stats: [] };
-        if (Array.isArray(detail)) return { id: '', stats: detail }; // 兼容旧缓存，随后会被新缓存覆盖
+    function passiveDetail(item) {
+        if (!item) return { id: '', name: '', stats: [] };
+        const name = typeof item === 'string' ? item : item.name;
+        const id = typeof item === 'object' ? item.id : '';
+        const en = typeof item === 'object' ? item.en : '';
+        let detail = null;
+        if (passiveDetails) {
+            detail = (id && passiveDetails[id]) ||
+                (name && passiveDetails[name]) ||
+                (en && passiveDetails[en]) ||
+                (passiveDetails[name]);
+        }
+        if (!detail) return { id: '', name: '', stats: [] };
+        if (Array.isArray(detail)) return { id: '', name: '', stats: detail }; // 兼容旧缓存
         return {
             id: detail.id || '',
+            name: detail.name || '',
             stats: Array.isArray(detail.stats) ? detail.stats : [],
         };
     }
 
-    function statsHtml(name) {
-        const detail = passiveDetail(name);
+    function statsHtml(item) {
+        const detail = passiveDetail(item);
         if (!detail.stats.length) return '';
         return `<div class="tb-mg-detail">${detail.stats.map((line) => `<div>${escapeHtml(line)}</div>`).join('')}</div>`;
     }
@@ -160,20 +173,22 @@
     function rowsHtml(stats) {
         if (!stats.length) return '<div class="tb-empty">没有统计到词条</div>';
         return stats.map((item) => {
-            const detail = passiveDetail(item.name);
-            const checked = selectedNames.has(item.name) ? 'checked' : '';
+            const detail = passiveDetail(item);
+            const itemName = typeof item === 'string' ? item : item.name;
+            const checked = selectedNames.has(itemName) ? 'checked' : '';
             const disabled = detail.id ? '' : 'disabled';
             const selectable = detail.id ? ' tb-mg-row-selectable' : '';
+            const displayName = detail.name || itemName;
             return `
             <div class="tb-mg-row${selectable}">
                 <div class="tb-mg-main">
                     <div class="tb-mg-line">
-                        <span class="tb-mg-name">${escapeHtml(item.name)}</span>
+                        <span class="tb-mg-name">${escapeHtml(displayName)}</span>
                         <span class="tb-mg-id">${detail.id ? 'ID: ' + escapeHtml(detail.id) : 'ID: —'}</span>
                         <span class="tb-mg-count">${item.count}</span>
-                        <input type="checkbox" class="tb-mg-check" data-name="${escapeHtml(item.name)}" ${checked} ${disabled}>
+                        <input type="checkbox" class="tb-mg-check" data-name="${escapeHtml(itemName)}" ${checked} ${disabled}>
                     </div>
-                    ${statsHtml(item.name)}
+                    ${statsHtml(item)}
                 </div>
             </div>`;
         }).join('');
@@ -217,12 +232,15 @@
             </div>`);
     }
 
+    const PASSIVE_CACHE_VERSION = 2;
+
     async function loadPassiveDetailsFromCache(url) {
         try {
             const cache = await ctx.storage.get(PASSIVE_CACHE_KEY, null);
-            if (cache && cache.url === url && cache.details) {
-                const first = cache.details[Object.keys(cache.details)[0]];
-                if (!Array.isArray(first)) return cache.details;
+            if (cache && cache.url === url && cache.version === PASSIVE_CACHE_VERSION && cache.details) {
+                const firstKey = Object.keys(cache.details)[0];
+                const first = cache.details[firstKey];
+                if (first && first.id && first.nodeId) return cache.details;
             }
         } catch (e) { /* ignore */ }
         return null;
@@ -230,7 +248,7 @@
 
     async function storePassiveDetails(url, details) {
         try {
-            await ctx.storage.set(PASSIVE_CACHE_KEY, { url, details, cachedAt: Date.now() });
+            await ctx.storage.set(PASSIVE_CACHE_KEY, { url, version: PASSIVE_CACHE_VERSION, details, cachedAt: Date.now() });
         } catch (e) { /* ignore */ }
     }
 
@@ -245,18 +263,16 @@
             btn.textContent = '加载中…';
         }
         try {
-            passiveDetails = await loadPassiveDetailsFromCache(url);
-            if (!passiveDetails) {
-                const resp = await ctx.sendBg({ type: 'POE_NINJA_PASSIVE_DETAILS', url });
-                if (!resp || resp.success === false) throw new Error((resp && resp.error) || '天赋详情加载失败');
-                passiveDetails = resp.details || {};
-                await storePassiveDetails(resp.url || url, passiveDetails);
-            }
+            const resp = await ctx.sendBg({ type: 'POE_NINJA_PASSIVE_DETAILS', url });
+            if (!resp || resp.success === false) throw new Error((resp && resp.error) || '天赋详情加载失败');
+            passiveDetails = resp.details || {};
+            await storePassiveDetails(resp.url || url, passiveDetails);
             renderResult(currentResult);
             saveLastResult();
             ctx.ui.toast('天赋详情已加载', 'success');
         } catch (e) {
             ctx.ui.toast(String(e.message || e), 'error', 5000);
+        } finally {
             if (btn) {
                 btn.disabled = false;
                 btn.textContent = '查看天赋详情';
@@ -298,7 +314,10 @@
 
     function openBuyLink() {
         const ids = Array.from(selectedNames)
-            .map((name) => passiveDetail(name).id)
+            .map((name) => {
+                const item = currentResult && currentResult.stats && currentResult.stats.find((s) => (s && s.name) === name);
+                return passiveDetail(item || name).id;
+            })
             .filter(Boolean);
         if (ids.length < 2) {
             ctx.ui.toast('请至少勾选 2 个已有 ID 的天赋', 'warning');
@@ -385,6 +404,15 @@
                 selectedNames = new Set(cached.selectedNames || []);
                 buyRealm = cached.buyRealm || (ctx.isIntl ? 'intl' : 'cn');
                 passiveDetails = await loadPassiveDetailsFromCache(passiveUrl);
+                if (!passiveDetails && passiveUrl) {
+                    ctx.sendBg({ type: 'POE_NINJA_PASSIVE_DETAILS', url: passiveUrl }).then((resp) => {
+                        if (resp && resp.success && resp.details) {
+                            passiveDetails = resp.details;
+                            storePassiveDetails(resp.url || passiveUrl, passiveDetails);
+                            if (currentResult) renderResult(currentResult);
+                        }
+                    }).catch(() => { });
+                }
                 renderResult(currentResult);
                 return;
             }

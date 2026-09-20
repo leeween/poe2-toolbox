@@ -114,20 +114,50 @@ function parseSearchRows(bytes) {
 
     let total = 0;
     const valueLists = [];
+    const columns = new Map();
     for (const field of readProtoFields(resultField.value)) {
-        if (field.no === 1 && field.wire === 0) total = field.value;
-        else if (field.no === 5 && field.wire === 2) valueLists.push(parseValueList(field.value));
+        if (field.no === 1 && field.wire === 0) {
+            total = field.value;
+        } else if (field.no === 5 && field.wire === 2) {
+            valueLists.push(parseValueList(field.value));
+        } else if (field.no === 12 && field.wire === 2) {
+            const sub = readProtoFields(field.value);
+            const idField = sub.find((s) => s.no === 1 && s.wire === 2);
+            if (idField) {
+                const id = protoString(idField.value);
+                const vals = sub
+                    .filter((s) => s.no === 7 && s.wire === 2)
+                    .map((s) => protoString(s.value));
+                columns.set(id, vals);
+            }
+        }
     }
 
-    const names = valueLists.find((list) => list.id === 'name');
-    const accounts = valueLists.find((list) => list.id === 'account');
-    if (!names || !accounts) throw new Error('poe.ninja search 返回缺少 name/account 列');
+    let namesList = [];
+    let accountsList = [];
+    if (columns.has('name') && columns.has('account')) {
+        namesList = columns.get('name') || [];
+        accountsList = columns.get('account') || [];
+    } else {
+        const names = valueLists.find((list) => list.id === 'name');
+        const accounts = valueLists.find((list) => list.id === 'account');
+        if (names && accounts) {
+            const l = Math.min(names.values.length, accounts.values.length);
+            for (let i = 0; i < l; i++) {
+                namesList.push((names.values[i] && names.values[i].str) || '');
+                accountsList.push((accounts.values[i] && accounts.values[i].str) || '');
+            }
+        }
+    }
+
+    if (total === 0) throw new Error('未找到符合当前筛选条件的构筑角色');
+    if (!namesList.length || !accountsList.length) throw new Error('poe.ninja search 返回缺少 name/account 列');
 
     const rows = [];
-    const len = Math.min(names.values.length, accounts.values.length);
+    const len = Math.min(namesList.length, accountsList.length);
     for (let i = 0; i < len; i++) {
-        const name = names.values[i] && names.values[i].str;
-        const account = accounts.values[i] && accounts.values[i].str;
+        const name = namesList[i];
+        const account = accountsList[i];
         if (name && account) rows.push({ index: i, account, name });
     }
     return { total, rows };
@@ -148,8 +178,17 @@ function displayZhKey(key) {
     return String(key || '').replace(new RegExp(sent, 'g'), '#');
 }
 
+function parseNotable(enchantMod) {
+    const text = String(enchantMod || '').replace(/^allocates\s+/i, '').trim();
+    const match = text.match(/^\[([^\[\]|]*)\|([^\[\]]*)\]$/);
+    if (match) {
+        return { id: match[1].trim(), en: match[2].trim() };
+    }
+    return { id: '', en: stripMarkup(text) };
+}
+
 function extractNotable(enchantMod) {
-    return stripMarkup(enchantMod).replace(/^allocates\s+/i, '').trim();
+    return parseNotable(enchantMod).en;
 }
 
 function parseBuildsUrl(rawUrl) {
@@ -215,9 +254,8 @@ function increment(map, key) {
 }
 
 function sortedStats(map) {
-    return Array.from(map.entries())
-        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-Hans-CN'))
-        .map(([name, count]) => ({ name, count }));
+    return Array.from(map.values())
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh-Hans-CN'));
 }
 
 function searchApiUrl(inputUrl, snapshot, timeMachine) {
@@ -255,26 +293,76 @@ function validatePassiveTreeUrl(rawUrl) {
     return url.href;
 }
 
-function buildPassiveDetails(data) {
+const PASSIVE_ID2ZH_KEY = 'megalomaniac-passive-id2zh';
+async function getPassiveIdToZh(versionPath = '4.5') {
+    const key = `${PASSIVE_ID2ZH_KEY}-${versionPath}`;
+    const { [key]: cached } = await chrome.storage.local.get({ [key]: null });
+    if (cached && cached.map && Date.now() - cached.t < PASSIVE_ID2NAME_TTL) return cached.map;
+    try {
+        const cnUrl = `https://poe2db.tw/data/passive-skill-tree/${versionPath}/data_cn.json`;
+        const data = await fetchJson(cnUrl);
+        const nodes = Object.values((data && data.nodes) || {});
+        const map = {};
+        for (const n of nodes) {
+            if (n && n.id && n.name) map[n.id] = n.name;
+            if (n && n.skill != null && n.name) map[String(n.skill)] = n.name;
+        }
+        await chrome.storage.local.set({ [key]: { t: Date.now(), map } });
+        return map;
+    } catch (e) {
+        if (cached && cached.map) return cached.map;
+        return {};
+    }
+}
+
+function buildPassiveDetails(data, idToEn, idToZh) {
     const nodesRaw = data && data.nodes;
     const nodes = Array.isArray(nodesRaw) ? nodesRaw : Object.values(nodesRaw || {});
     const details = {};
     for (const node of nodes) {
-        if (!node || typeof node.name !== 'string' || !Array.isArray(node.stats)) continue;
-        const stats = node.stats.filter((line) => typeof line === 'string' && line.trim());
+        if (!node || typeof node.name !== 'string') continue;
+        const stats = Array.isArray(node.stats)
+            ? node.stats.filter((line) => typeof line === 'string' && line.trim())
+            : [];
         const connection = Array.isArray(node.connections) && node.connections[0];
         const id = node.skill != null ? String(node.skill)
             : connection && connection.id != null ? String(connection.id)
                 : '';
-        if (stats.length || id) details[node.name] = { id, stats };
+        if (!stats.length && !id) continue;
+
+        const nodeId = String(node.id || '');
+        const enName = (idToEn && nodeId && idToEn[nodeId]) ||
+            (idToEn && node.skill != null && idToEn[String(node.skill)]) || '';
+        const zhName = (idToZh && nodeId && idToZh[nodeId]) ||
+            (idToZh && node.skill != null && idToZh[String(node.skill)]) || '';
+
+        const item = {
+            id,
+            nodeId,
+            name: node.name || zhName || enName,
+            zhName: zhName || '',
+            enName: enName || '',
+            stats,
+        };
+
+        if (nodeId) details[nodeId] = item;
+        if (node.name) details[node.name] = item;
+        if (zhName) details[zhName] = item;
+        if (enName) details[enName] = item;
     }
     return details;
 }
 
 async function fetchPassiveDetails(req) {
     const url = validatePassiveTreeUrl(req.url);
-    const data = await fetchJson(url);
-    const details = buildPassiveDetails(data);
+    const match = url.match(/\/passive-skill-tree\/([^/]+)\//);
+    const versionPath = match ? match[1] : '4.5';
+    const [data, idToEn, idToZh] = await Promise.all([
+        fetchJson(url),
+        getPassiveIdToName().catch(() => ({})),
+        getPassiveIdToZh(versionPath).catch(() => ({})),
+    ]);
+    const details = buildPassiveDetails(data, idToEn, idToZh);
     return { url, details, count: Object.keys(details).length };
 }
 
@@ -304,13 +392,19 @@ async function analyzeMegalomaniac(req) {
             const character = await fetchJson(characterApiUrl(snapshot, row, timeMachine));
             const jewels = findMegalomaniacJewels(character);
             for (const jewel of jewels) {
-                const notables = (Array.isArray(jewel.enchantMods) ? jewel.enchantMods : [])
-                    .map(extractNotable)
-                    .filter(Boolean)
-                    .map((name) => translateNotable(name, enToZh));
-                if (!notables.length) continue;
-                jewelCount++;
-                for (const notable of notables) increment(counts, notable);
+                const enchantMods = Array.isArray(jewel.enchantMods) ? jewel.enchantMods : [];
+                for (const raw of enchantMods) {
+                    const parsed = parseNotable(raw);
+                    if (!parsed.en) continue;
+                    const zh = translateNotable(parsed.en, enToZh);
+                    jewelCount++;
+                    const key = zh || parsed.en;
+                    const cur = counts.get(key) || { name: key, id: parsed.id, en: parsed.en, count: 0 };
+                    cur.count += 1;
+                    if (parsed.id && !cur.id) cur.id = parsed.id;
+                    if (parsed.en && !cur.en) cur.en = parsed.en;
+                    counts.set(key, cur);
+                }
             }
         } catch (e) {
             if (e && e.name === 'PoeNinjaRateLimitError') {
