@@ -25,7 +25,7 @@
     let passiveUrl = DEFAULT_PASSIVE_URL;
     let passiveDetails = null;
     let selectedNames = new Set();
-    let buyRealm = 'cn';
+    let buyRealm = ctx.isIntl ? 'intl' : 'cn';
     let running = false;
 
     function setBody(html) {
@@ -383,7 +383,7 @@
                 lastInput = cached.input || lastInput;
                 passiveUrl = cached.passiveUrl || passiveUrl;
                 selectedNames = new Set(cached.selectedNames || []);
-                buyRealm = cached.buyRealm || 'cn';
+                buyRealm = cached.buyRealm || (ctx.isIntl ? 'intl' : 'cn');
                 passiveDetails = await loadPassiveDetailsFromCache(passiveUrl);
                 renderResult(currentResult);
                 return;

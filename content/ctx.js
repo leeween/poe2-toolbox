@@ -10,7 +10,7 @@
     // ── 站点 / 版本探测 ────────────────────────────────────────────────
     const host = window.location.hostname;
     const isQQ = host === 'poe.game.qq.com';
-    const isIntl = host === 'www.pathofexile.com';
+    const isIntl = host === 'www.pathofexile.com' || host === 'pathofexile.com';
     // 国服用 poe2- 前缀（与旧插件 schema 一致，不动国服数据）；国际服用 poe2-intl- 前缀做数据隔离。
     const version = isIntl ? 'poe2-intl' : 'poe2';
 
@@ -128,7 +128,7 @@
         if (sub && Object.prototype.hasOwnProperty.call(sub, id)) {
             return sub[id] !== false;
         }
-        return isQQ; // 国服默认启用，国际服默认关闭
+        return true; // 国服与国际服默认均启用
     }
 
     // ── 后台消息 ──────────────────────────────────────────────────────

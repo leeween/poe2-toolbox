@@ -25,7 +25,8 @@
         {
             "matches": [
                 "https://poe.game.qq.com/trade2*",
-                "https://www.pathofexile.com/trade2*"
+                "https://www.pathofexile.com/trade2*",
+                "https://pathofexile.com/trade2*"
             ],
             "js": [
                 "lib/category-map.js",
@@ -45,7 +46,8 @@
         {
             "matches": [
                 "https://poe.game.qq.com/trade2*",
-                "https://www.pathofexile.com/trade2*"
+                "https://www.pathofexile.com/trade2*",
+                "https://pathofexile.com/trade2*"
             ],
             "js": [
                 "content/pob-netcapture.main.js"

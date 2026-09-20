@@ -266,7 +266,7 @@
     chrome.runtime.onMessage.addListener((req) => {
         if (req && req.type === 'TOGGLE_PANEL') {
             if (panelEl) togglePanel();
-            else init();
+            else ctx.sendBg({ type: 'OPEN_OPTIONS' });
         }
     });
 

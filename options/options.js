@@ -56,7 +56,7 @@ async function renderFeatures() {
                     <label class="switch"><input type="checkbox" data-scope="qq" data-id="${f.id}" ${enabled.qq[f.id] !== false ? 'checked' : ''}><span class="slider"></span></label>
                 </label>
                 <label class="switch-label">国际服
-                    <label class="switch"><input type="checkbox" data-scope="intl" data-id="${f.id}" ${enabled.intl[f.id] === true ? 'checked' : ''}><span class="slider"></span></label>
+                    <label class="switch"><input type="checkbox" data-scope="intl" data-id="${f.id}" ${enabled.intl[f.id] !== false ? 'checked' : ''}><span class="slider"></span></label>
                 </label>
             </div>`;
         list.appendChild(row);

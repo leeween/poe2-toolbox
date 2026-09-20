@@ -359,6 +359,11 @@
             const raw = arr[i];
             const text = modText(raw);
             if (!text) continue; // 对象提取不到文本：跳过，不再输出 [object Object]
+            // 如果已经是纯英文（不含任何中文字符），无需经过词典翻译，直接输出
+            if (!/[一-鿿]/.test(text)) {
+                for (const seg of text.split('\n')) out.push(suffix ? `${seg} ${suffix}` : seg);
+                continue;
+            }
             // 核心天赋「配置 [key|zhName]」行可能出现在 enchantMods，也可能被接口归到 explicitMods 等字段。
             // 所有词缀行都先尝试按 key 翻译；enchantMods 额外传 skill id 兜底。
             const alloc = translateAllocateLine(text, skillIds ? skillIds[i] : null);
@@ -378,6 +383,8 @@
         return s.replace(/\b([a-z])([a-z']*)/g, (_, a, b) => a.toUpperCase() + b);
     }
     function translateName(zhRaw, slug) {
+        if (!zhRaw) return '';
+        if (!/[一-鿿]/.test(zhRaw)) return titleCase(zhRaw);
         const en = translateLine(zhRaw, slug);
         return en != null ? titleCase(en) : String(zhRaw || '');
     }
@@ -410,7 +417,7 @@
 
         const ext = it.extended || {};
         const propBlock = [];
-        const quality = propValue(it.properties, ['品质']);
+        const quality = propValue(it.properties, ['品质', 'Quality']);
         if (quality) propBlock.push(`Quality: ${quality.replace(/[^0-9+%-]/g, '') || quality}`);
         if (ext.ar != null) propBlock.push(`Armour: ${ext.ar}`);
         if (ext.ev != null) propBlock.push(`Evasion Rating: ${ext.ev}`);
@@ -551,6 +558,22 @@
         setTimeout(() => { btn.textContent = old; btn.style.background = 'linear-gradient(#e6c98a,#c8a165)'; }, 1200);
     }
 
+    function itemNeedsTranslation(it) {
+        if (!it) return false;
+        if (it.name && /[一-鿿]/.test(it.name)) return true;
+        if (it.typeLine && /[一-鿿]/.test(it.typeLine)) return true;
+        if (it.baseType && /[一-鿿]/.test(it.baseType)) return true;
+        for (const k of Object.keys(it)) {
+            if (/Mods$/.test(k) && Array.isArray(it[k])) {
+                for (const m of it[k]) {
+                    const t = modText(m);
+                    if (t && /[一-鿿]/.test(t)) return true;
+                }
+            }
+        }
+        return false;
+    }
+
     function attachButtons() {
         const { sel, nodes } = findRows();
         if (!nodes.length) { log('未匹配到结果行，检查 CONFIG.rowSelectors'); return; }
@@ -568,7 +591,8 @@
                 e.stopPropagation();
                 const result = resolveItemForRow(row, idx);
                 if (!result) { flash(btn, '无数据', false); warn('该行未匹配到物品数据'); return; }
-                if (!dict()) {
+                const needsZh = itemNeedsTranslation(result.item);
+                if (needsZh && !dict()) {
                     btn.disabled = true; btn.textContent = '下载词典…';
                     const okDict = await ensureDict();
                     btn.disabled = false; btn.textContent = btn.dataset.label;
@@ -578,13 +602,13 @@
                 const catSlugs = resolveSlugsByCategory(result.item);
                 // jewel 精确 slug + category 展开的 slug 一起预取；去重
                 const allSlugs = [...new Set([slug, ...catSlugs].filter(Boolean))];
-                if (allSlugs.length) {
+                if (needsZh && allSlugs.length) {
                     btn.disabled = true; btn.textContent = '补词典…';
                     try { await ensureSlugs(allSlugs); } catch (e) { warn('补充词典失败', allSlugs, e); }
                     btn.disabled = false; btn.textContent = btn.dataset.label;
                 }
                 // 核心天赋英文名表（Allocates 行用）。有就预取，失败不阻塞。
-                if (!passiveId2Name) {
+                if (needsZh && !passiveId2Name) {
                     try { await ensurePassiveId2Name(); } catch (e) { warn('核心天赋表加载失败', e); }
                 }
                 const text = buildPobText(result, slug);

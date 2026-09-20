@@ -204,7 +204,7 @@
             <h2><span class="icon">⚙</span>通用说明</h2>
             <ul>
                 <li><strong>侧边栏</strong>：右上角按钮依次为 刷新（重载当前 tab 数据）/ 清空（清当前 tab 数据）/ 设置（打开扩展设置页）。刷新和清空按当前 tab 是否支持自动显隐。</li>
-                <li><strong>功能开关</strong>：在设置页为每个功能分别配置国服 / 国际服是否启用。国服默认全开，国际服默认全关（未充分测试，需手动开启）。</li>
+                <li><strong>功能开关</strong>：在设置页为每个功能分别配置国服 / 国际服是否启用。国服与国际服均默认开启，支持单独控制。</li>
                 <li><strong>数据隔离</strong>：搜索历史、收藏、妄想症缓存、上次 tab 等所有用户数据按国服 / 国际服前缀独立存储，互不污染。</li>
                 <li><strong>加载方式</strong>：原生 JS，无构建步骤。改完代码后在 <code>chrome://extensions</code> 点扩展的「刷新」重载；content script 改动还需刷新目标页面。</li>
             </ul>
