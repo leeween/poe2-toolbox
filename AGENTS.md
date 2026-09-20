@@ -72,11 +72,14 @@ PoE2TB.register({
 
 | 功能 | id | 形态 | scope | 生效页面 |
 |---|---|---|---|---|
-| 搜索历史 | history | tab | 国服 | `poe.game.qq.com/trade*` `/trade2*` |
-| 收藏管理 | favorites | tab | 国服 | 同上 |
-| 复制PoB | pob | 内联按钮 | 国服 + poe2 | `poe.game.qq.com/trade2*` |
-| 查看词缀 | view-mods | tab | poe2(国服+国际服) | `poe.game.qq.com/trade2*` `www.pathofexile.com/trade2*` |
-| 妄想症统计 | megalomaniac | tab | poe2(国服+国际服) | `poe.game.qq.com/trade2*` `www.pathofexile.com/trade2*` |
+| 搜索历史 | history | tab | poe2(国服+国际服) | `poe.game.qq.com/trade*` `/trade2*` `pathofexile.com/trade2*` |
+| 收藏管理 | favorites | tab | poe2(国服+国际服) | 同上 |
+| 复制PoB | pob | 内联按钮 | poe2(国服+国际服) | `poe.game.qq.com/trade2*` `pathofexile.com/trade2*` |
+| 查看词缀 | view-mods | tab | poe2(国服+国际服) | 同上 |
+| 妄想症统计 | megalomaniac | tab | poe2(国服+国际服) | 同上 |
+
+- 国服与国际服功能均默认开启，用户数据分别以 `poe2-` 与 `poe2-intl-` 前缀独立存储、互不混用。
+- 复制 PoB 在国际服遇到纯英文物品时直接原样输出英文（不带「未翻译」标记），且跳过 5.7MB 中文主词典与补充词典的下载检查，零延迟即点即复制；支持识别 `'Quality'` 装备品质属性。
 
 `host_permissions`：`poe2db.tw`（查看词缀抓取、天赋树详情）、`ninja.710421059.xyz`（词典原料）、`poe.ninja`（妄想症统计）。`permissions` 含 `unlimitedStorage`（词典与统计缓存存 storage.local）。
 
@@ -96,12 +99,16 @@ PoE2TB.register({
 
 - 前端入口：`content/features/megalomaniac.js`，侧边栏 tab，id 为 `megalomaniac`，设置页开关在 `options/options.js`。
 - 后台入口：`background/poe-ninja.js`，消息类型 `POE_NINJA_MEGALOMANIAC`（统计）和 `POE_NINJA_PASSIVE_DETAILS`（天赋详情）。
-- 输入是 poe.ninja builds 链接和账号数量（10-100）。后台先通过 `/poe2/api/data/index-state` 用链接里的 league 找 snapshot version，再请求 `/search` protobuf，解析 `name/account` 列并串行请求 `/character`。
+- 输入是 poe.ninja builds 链接和账号数量（10-100）。后台先通过 `/poe2/api/data/index-state` 用链接里的 league 找 snapshot version，再请求 `/search` protobuf。
+- **Protobuf 列解析**：支持最新 poe.ninja search 的 `field 12`（子字段 1 为列 id，子字段 7 为 repeated string）列结构，并向下兼容旧版 `field 5`（ValueList 嵌套对象），串行请求 `/character`。
 - `/character` 请求之间固定等待 1200ms，避免快速触发 poe.ninja 限流；遇到 429 时停止继续请求，并把限流信息返回前端展示。
-- Megalomaniac 的 `enchantMods` 只做词条统计，不做组合统计；英文词条通过当前 PoB 词典缓存反查中文，插件运行时不要改为读取 `statics/lang-sc.json`。
-- 天赋详情默认 URL：`https://poe2db.tw/data/passive-skill-tree/4.5/data_cn.json`。详情以 name 匹配，展示 `stats`，购买 ID 优先用节点 `skill` 字段，缺失时才回退 `connections[0].id`。
-- 前端缓存键：`megalomaniac-last-input`（上次输入）、`megalomaniac-last-result`（上次统计结果/勾选/服务器）、`megalomaniac-passive-url`（天赋详情 URL）、`megalomaniac-passive-cache`（天赋详情数据）。
-- 购买链接 payload 需要有外层 `query`，`stats` 中保留一个空 `and` 和一个 `count`，`count.value.min` 固定为 2，只替换 `filters` 里的 `enchant.stat_2954116742|<id>`。
+- Megalomaniac 的 `enchantMods`（形如 `Allocates [attack_speed31|Stimulants]`）同时提取 `nodeId`、英文原名与简中翻译名称，做词条频次统计。
+- **天赋详情默认 URL 与四向索引**：
+  - 国际服默认使用繁体 `https://poe2db.tw/data/passive-skill-tree/4.5/data_tw.json`，国服默认使用简体 `data_cn.json`。
+  - 后台抓取天赋树时，自动结合官方 `data_cn.json` 与 `data_us.json` 生成 `nodeId`、繁中名、简中名、英文名四向对齐索引，无论前台当前持有哪种语言名称，都能 100% 命中同一个节点。
+  - 购买数字 ID 优先用节点 `skill` 字段，缺失时才回退 `connections[0].id`；前台界面名称自动随当前词典语言同步切换显示。
+- 前端缓存键：`megalomaniac-last-input`（上次输入）、`megalomaniac-last-result`（上次统计结果/勾选/服务器）、`megalomaniac-passive-url`（天赋详情 URL）、`megalomaniac-passive-cache`（天赋详情数据，带 `version: 2` 版本控制）。点击「查看天赋详情」按钮时强制向后台请求最新数据以更新缓存。
+- 购买链接 payload 需要有外层 `query`，`stats` 中保留一个空 `and` 和一个 `count`，`count.value.min` 固定为 2，只替换 `filters` 里的 `enchant.stat_2954116742|<id>`。国际服页面下默认勾选购买服务器为国际服。
 - 本地调试脚本：`node tools/poe-ninja-megalomaniac.mjs "<poe.ninja builds 链接>" 20`。该脚本使用 `statics/lang-sc.json` 便于本地调试，插件运行时仍走 PoB 词典缓存。
 
 ## 真机待调点（调不通先看这里）

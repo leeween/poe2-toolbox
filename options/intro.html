@@ -169,11 +169,12 @@
             <h2><span class="icon">📋</span>复制 PoB <span class="badge">结果行内联按钮 · 国服+国际服</span></h2>
             <p>在每条搜索结果行上注入一个「复制PoB」按钮，一键把该物品翻译成 Path of Building 可识别的文本格式并写入剪贴板。</p>
             <ul>
-                <li>中文词缀会被翻译回英文（PoB 只认英文），翻译表首次使用时从远程下载约 5.7MB 原料并在本地建表缓存，14 天更新一次。</li>
+                <li><strong>国服</strong>：中文词缀会被翻译回英文（PoB 只认英文），翻译表首次使用时从远程下载约 5.7MB 原料并在本地建表缓存，14 天更新一次。</li>
+                <li><strong>国际服</strong>：英文物品直接原样输出，无需下载中文词典，零等待即点即复制；自动识别 Quality 品质属性。</li>
                 <li>物品数据由页面 fetch 劫持实时捕获，无需额外请求。</li>
                 <li>词典缓存可手动导入 / 更新（见设置页）。</li>
             </ul>
-            <div class="tip"><strong>词典共用：</strong>翻译词典内容国服 / 国际服一致，共用一份缓存以节省空间。</div>
+            <div class="tip"><strong>词典共用：</strong>翻译词典内容国服 / 国际服一致，共用一份缓存以节省空间。纯英文物品不依赖词典。</div>
         </section>
 
         <section>
@@ -193,8 +194,8 @@
             <ul>
                 <li>英文词条通过当前 PoB 词典反查中文展示。</li>
                 <li>点击词条可查看天赋详情（stats 数值、购买 ID），并生成集市购买链接。</li>
+                <li><strong>多语言四向对齐</strong>：天赋详情 URL 在国服默认为简体（<code>data_cn.json</code>），国际服默认为繁体（<code>data_tw.json</code>）。后台通过官方数据自动将繁中、简中、英文与节点 ID 全面四向对齐，界面展示名称随当前词典自适应切换。</li>
                 <li>购买链接 payload 的 <code>count.value.min</code> 固定为 2，只替换对应词条 filter。</li>
-                <li>天赋树详情数据来自 poe2db，URL 可在面板里自定义，缓存复用。</li>
                 <li>上次输入 / 上次结果 / 勾选状态会缓存，刷新侧边栏不丢。</li>
             </ul>
             <div class="tip"><strong>限流说明：</strong>每两个角色之间固定等待 1200ms，遇到 poe.ninja 429 会停止后续请求并提示。账号越多耗时越久，属正常现象。</div>
