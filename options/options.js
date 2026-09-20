@@ -10,6 +10,8 @@ const FEATURES = [
     { id: 'pob', name: '复制 PoB', desc: '在结果行加按钮，复制 Path of Building 文本（POE2）' },
     { id: 'view-mods', name: '查看词缀', desc: '查看物品类型在 poe2db 的全部可出词缀' },
     { id: 'megalomaniac', name: '妄想症统计', desc: '统计 poe.ninja 构筑里 Megalomaniac 词条出现次数' },
+    { id: 'trade-tw', name: '国际服汉化', desc: '国际服集市界面与装备繁体中文化（仅国际服生效）' },
+    { id: 'stat-presets', name: '词缀搜索预设', desc: '高级词缀权重预设与自定义预设组保存（仅国际服生效）' },
 ];
 
 function sendBg(msg) {

@@ -36,6 +36,8 @@
                 "content/features/pob-copy.js",
                 "content/features/view-mods.js",
                 "content/features/megalomaniac.js",
+                "content/features/trade-tw.js",
+                "content/features/stat-presets.js",
                 "content/shell.js"
             ],
             "css": [
@@ -51,6 +53,19 @@
             ],
             "js": [
                 "content/pob-netcapture.main.js"
+            ],
+            "run_at": "document_start",
+            "world": "MAIN"
+        },
+        {
+            "matches": [
+                "https://www.pathofexile.com/trade2*",
+                "https://pathofexile.com/trade2*"
+            ],
+            "js": [
+                "lib/trade-tw-dict.js",
+                "content/trade-tw.main.js",
+                "content/stat-presets.main.js"
             ],
             "run_at": "document_start",
             "world": "MAIN"

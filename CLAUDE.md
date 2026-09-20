@@ -77,6 +77,8 @@ PoE2TB.register({
 | 复制PoB | pob | 内联按钮 | poe2(国服+国际服) | `poe.game.qq.com/trade2*` `pathofexile.com/trade2*` |
 | 查看词缀 | view-mods | tab | poe2(国服+国际服) | 同上 |
 | 妄想症统计 | megalomaniac | tab | poe2(国服+国际服) | 同上 |
+| 国际服汉化 | trade-tw | tab + 劫持 | 仅国际服 | `pathofexile.com/trade2*` |
+| 词缀搜索预设 | stat-presets | tab + 页面注入 | 仅国际服 | `pathofexile.com/trade2*` |
 
 - 国服与国际服功能均默认开启，用户数据分别以 `poe2-` 与 `poe2-intl-` 前缀独立存储、互不混用。
 - 复制 PoB 在国际服遇到纯英文物品时直接原样输出英文（不带「未翻译」标记），且跳过 5.7MB 中文主词典与补充词典的下载检查，零延迟即点即复制；支持识别 `'Quality'` 装备品质属性。
@@ -116,6 +118,20 @@ PoE2TB.register({
 - 后台 `background/poe-ninja.js` 的 `buildPassiveIdToName` 拉 `https://poe2db.tw/data/passive-skill-tree/4.5/data_us.json`（**英文页**，中文页 `data_cn.json` 的 `name` 是中文不能用），构建 `{ id: 英文名, skill: 英文名 }` 双索引，存 `chrome.storage.local['megalomaniac-passive-id2name']`，TTL 14 天，type 为 `POB_PASSIVE_ID_TO_NAME`。
 - 内容脚本 `pob-copy.js` 的 `translateAllocateLine` 优先用文本里的 statKeyId（`fire58`）查，命中不到再用 `extractEnchantSkillIds` 抽出的数字 skill id 兜底；命中则输出 PoB 标准的「Allocates <英文名> (enchant)」，未命中走原「未翻译」兜底。
 - 本地调试脚本：`node tools/poe-ninja-megalomaniac.mjs "<poe.ninja builds 链接>" 20`。该脚本使用 `statics/lang-sc.json` 便于本地调试，插件运行时仍走 PoB 词典缓存。
+
+## 国际服汉化与词缀搜索预设（油猴脚本迁移）
+
+- 来源：从油猴脚本 `POE2-trade-tw-lang-fixed.user.js` 拆分并模块化重构为两个独立功能：
+  1. **国际服汉化 (`trade-tw`)**：
+     - 数据源：`lib/trade-tw-dict.js`（挂载在 `globalThis.PoE2TWDict`），内含物品基底与名称（`typeTransMap`）、通货（`twStatic`）、词缀（`twStats`）、过滤条件（`twFilters`）、装备属性（`twProps`）、天赋配置（`allocates`）、天赋树核心天赋详情（`notableStats`，用于妄想症等天赋效果说明翻译）及静态文案（`translations`）。
+     - MAIN 劫持核心：`content/trade-tw.main.js`（`world: "MAIN"`, `run_at: "document_start"`）。使用精简版 `ajaxHooker` 拦截官方集市的 `/api/trade2/data/*`（基础数据）与 `/api/trade2/fetch/*`（搜索结果），改写为繁体中文（含 `item.notableProperties` 妄想症天赋效果翻译）。同时执行 DOM 静态文本替换。
+     - **复制 PoB 互不干扰机制**：在 `manifest.json` 中 `content/pob-netcapture.main.js` 优先捕获原始请求响应并克隆未翻译的英文 JSON 派发给 PoB 模块，随后汉化模块改写页面展示数据，确保「网页繁中、复制 PoB 纯英文」两不误。
+     - 侧边栏控制：`content/features/trade-tw.js`（侧边栏 tab），完全由插件统一控制开启/取消繁体化，取消后清空集市缓存并彻底恢复为官方原生英文；支持一键清理官方 `lscache-trade2*` 缓存并刷新。不污染官方页面顶部账号导航栏。
+  2. **词缀搜索预设 (`stat-presets`)**：
+     - 页面注入核心：`content/stat-presets.main.js`（`world: "MAIN"`），在高级筛选区注入「预设综合选项」下拉框（由 `weightSum` 驱动），选择后直接调用官方页面 Vuex 实例 `window.app.$store.commit("pushStatGroup", ...)` 添加权重词缀组。
+     - 自定义预设保存：在词缀筛选组旁注入「保存预设」按钮，弹出命名对话框保存到 `localStorage['poe2tb_saved_stat_presets']`。
+     - 侧边栏管理：`content/features/stat-presets.js`，支持列出、一键填入、单独删除、清空全部、导入与导出预设 JSON 数组。
+     - 跨世界通信：侧边栏通过 `window.postMessage({ __poe2tb_apply_preset: true, query })` 通知 MAIN 世界的 `stat-presets.main.js` 将预设填入集市搜索表单。
 
 ## 真机待调点（调不通先看这里）
 
