@@ -131,24 +131,6 @@
         return true; // 国服与国际服默认均启用
     }
 
-    // 国际服下将 options 存储的开关状态同步至页面的 localStorage，供 MAIN 世界读取
-    if (isIntl) {
-        getEnabledMap().then((map) => {
-            const sub = map && map.intl;
-            if (sub) {
-                if (sub['trade-tw'] === false) {
-                    localStorage.setItem('poe2tb_tw_enabled', '0');
-                } else if (sub['trade-tw'] === true) {
-                    localStorage.setItem('poe2tb_tw_enabled', '1');
-                }
-                if (sub['stat-presets'] === false) {
-                    localStorage.setItem('poe2tb_presets_enabled', '0');
-                } else if (sub['stat-presets'] === true) {
-                    localStorage.setItem('poe2tb_presets_enabled', '1');
-                }
-            }
-        }).catch(() => {});
-    }
 
     // ── 后台消息 ──────────────────────────────────────────────────────
     function sendBg(msg) {

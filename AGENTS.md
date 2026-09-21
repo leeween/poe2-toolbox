@@ -77,6 +77,7 @@ PoE2TB.register({
 | 复制PoB | pob | 内联按钮 | poe2(国服+国际服) | `poe.game.qq.com/trade2*` `pathofexile.com/trade2*` |
 | 查看词缀 | view-mods | tab | poe2(国服+国际服) | 同上 |
 | 妄想症统计 | megalomaniac | tab | poe2(国服+国际服) | 同上 |
+| 搜索加强 | search-enhance | tab + 页面注入 | poe2(国服+国际服) | `poe.game.qq.com/trade2*` `pathofexile.com/trade2*` |
 
 - 国服与国际服功能均默认开启，用户数据分别以 `poe2-` 与 `poe2-intl-` 前缀独立存储、互不混用。
 - 复制 PoB 在国际服遇到纯英文物品时直接原样输出英文（不带「未翻译」标记），且跳过 5.7MB 中文主词典与补充词典的下载检查，零延迟即点即复制；支持识别 `'Quality'` 装备品质属性。
@@ -110,6 +111,19 @@ PoE2TB.register({
 - 前端缓存键：`megalomaniac-last-input`（上次输入）、`megalomaniac-last-result`（上次统计结果/勾选/服务器）、`megalomaniac-passive-url`（天赋详情 URL）、`megalomaniac-passive-cache`（天赋详情数据，带 `version: 2` 版本控制）。点击「查看天赋详情」按钮时强制向后台请求最新数据以更新缓存。
 - 购买链接 payload 需要有外层 `query`，`stats` 中保留一个空 `and` 和一个 `count`，`count.value.min` 固定为 2，只替换 `filters` 里的 `enchant.stat_2954116742|<id>`。国际服页面下默认勾选购买服务器为国际服。
 - 本地调试脚本：`node tools/poe-ninja-megalomaniac.mjs "<poe.ninja builds 链接>" 20`。该脚本使用 `statics/lang-sc.json` 便于本地调试，插件运行时仍走 PoB 词典缓存。
+
+## 搜索加强（预设综合选项自定义与国际服繁体汉化）
+
+- 模块文件：`content/features/search-enhance.js`（侧边栏 tab，id 为 `search-enhance`），页面注入为 `content/stat-presets.main.js` 与 `content/trade-tw.main.js`。
+- **自定义预设综合选项**：
+  - 在侧边栏「搜索加强」tab 支持自定义预设名称（如「石板稀有怪物」）、筛选组类型（`count` 计数、`weight` 加权求和、`and` 全部、`not` 非、`if` 条件）、数值阈值（`min` 最小值与 `max` 最大值）及关联词条列表。
+  - 支持「从当前集市抓取词缀」一键将页面筛选组读入编辑面板。
+  - 保存后自动存入 `localStorage['poe2tb_saved_stat_presets']`，并同步更新高级筛选区的「预设综合选项」下拉框（`poe2tb-weight-select`）。下拉框选择或侧边栏点击「填入」均自动 commit `pushStatGroup` 注入集市 Vuex。
+  - 支持预设的编辑、单独删除、清空、导入与导出 JSON 数组备份。
+- **国际服繁体汉化控制**：
+  - 在国际服环境下，Tab 顶部展示繁体中文化开关卡片。
+  - 开关切换自动写入 `localStorage['poe2tb_tw_enabled']`、清理相关 trade2 数据缓存，并自动执行 `location.reload()` 重新加载页面，实时切换繁体中文或原生英文。
+  - 提供一键「重置缓存」按钮快速修复官方本地脏缓存。不污染「复制 PoB」的纯英文导出。
 
 ## 真机待调点（调不通先看这里）
 

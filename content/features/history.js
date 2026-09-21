@@ -35,12 +35,12 @@
         }
         const stats = `<div class="tb-stats">共 ${history.length} 条记录</div>`;
         const items = history.map((r) => `
-            <div class="tb-list-item" data-url="${escapeHtml(r.url)}" data-id="${escapeHtml(r.id)}">
-                <button class="tb-item-del" data-id="${escapeHtml(r.id)}" title="删除">×</button>
+            <a class="tb-list-item tb-history-link" href="${escapeHtml(r.url)}" data-url="${escapeHtml(r.url)}" data-id="${escapeHtml(r.id)}">
+                <button class="tb-item-del" data-id="${escapeHtml(r.id)}" title="删除" type="button">×</button>
                 <div class="tb-item-title">${escapeHtml(r.title)}</div>
                 <div class="tb-item-sub">${formatTime(r.timestamp)}</div>
                 <div class="tb-item-tags">${formatParams(r.params)}</div>
-            </div>`).join('');
+            </a>`).join('');
         listEl.innerHTML = stats + items;
     }
 
@@ -101,6 +101,7 @@
         listEl.addEventListener('click', async (e) => {
             const del = e.target.closest('.tb-item-del');
             if (del) {
+                e.preventDefault();
                 e.stopPropagation();
                 const ok = await ctx.ui.confirm('删除记录', '确定要删除这条记录吗？', '删除', '取消');
                 if (!ok) return;
@@ -110,12 +111,23 @@
             }
             const item = e.target.closest('.tb-list-item');
             if (!item) return;
-            const url = item.dataset.url;
-            if (!url) return;
-            if (new URL(url, location.href).href === window.location.href) {
-                ctx.ui.toast('当前已在该搜索结果页面', 'warning');
+
+            // 若用户按住辅助键 (Ctrl / Cmd / Shift) 或非左键点击，由浏览器原生处理新标签/新窗口打开
+            if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) {
                 return;
             }
+
+            const url = item.getAttribute('href') || item.dataset.url;
+            if (!url) return;
+            try {
+                if (new URL(url, location.href).href === window.location.href) {
+                    e.preventDefault();
+                    ctx.ui.toast('当前已在该搜索结果页面', 'warning');
+                    return;
+                }
+            } catch (err) {}
+
+            e.preventDefault();
             window.location.href = url;
         });
     }

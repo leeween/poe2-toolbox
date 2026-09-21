@@ -12,10 +12,14 @@
     }
     function forwardItems(json) { post({ __poe2tb_pob: true, payload: json }); }
 
-    // 从 search 请求体里读类别 id
+    // 从 search 请求体里读类别 id 与搜索查询体
     function grabSearchCategory(body) {
         try {
             const j = typeof body === 'string' ? JSON.parse(body) : body;
+            if (j && j.query) {
+                window.__poe2tb_last_search_query = j.query;
+                post({ __poe2tb_search_query: true, query: j.query });
+            }
             const opt = j && j.query && j.query.filters && j.query.filters.type_filters &&
                 j.query.filters.type_filters.filters && j.query.filters.type_filters.filters.category &&
                 j.query.filters.type_filters.filters.category.option;

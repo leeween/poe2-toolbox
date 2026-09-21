@@ -3,16 +3,7 @@
 (function () {
     'use strict';
 
-    const PRESETS_ENABLED_KEY = 'poe2tb_presets_enabled';
     const PRESETS_STORAGE_KEY = 'poe2tb_saved_stat_presets';
-
-    function isPresetsEnabled() {
-        return localStorage.getItem(PRESETS_ENABLED_KEY) !== '0';
-    }
-
-    if (!isPresetsEnabled()) {
-        return;
-    }
 
     // ── 1) 词典与权重格式化 ───────────────────────────────────────────
     const dict = window.PoE2TWDict || globalThis.PoE2TWDict || {};
@@ -59,6 +50,251 @@
             entries: newEntries,
         });
     });
+
+    // ── 1.1) Vue 实例与 Store 稳健获取 ─────────────────────────────────
+    function getVueApp() {
+        if (window.app && (window.app.$store || window.app.query)) return window.app;
+        if (typeof window.unsafeWindow !== 'undefined' && window.unsafeWindow.app && (window.unsafeWindow.app.$store || window.unsafeWindow.app.query)) {
+            return window.unsafeWindow.app;
+        }
+
+        const selectors = [
+            '#app',
+            '#trade',
+            '.trade-container',
+            '.search-advanced-pane',
+            '.search-bar',
+            '.filter-group',
+            '.filter-group-header',
+            '.multiselect'
+        ];
+        for (const sel of selectors) {
+            const el = document.querySelector(sel);
+            if (el && el.__vue__) {
+                const root = el.__vue__.$root || el.__vue__;
+                if (root && root.$store) return root;
+                if (el.__vue__.$store) return el.__vue__;
+                if (root && root.query) return root;
+            }
+        }
+
+        const anyVueEl = document.querySelector('.search-advanced-pane, .trade-container, #app');
+        if (anyVueEl && anyVueEl.__vue__) {
+            let curr = anyVueEl.__vue__;
+            while (curr) {
+                if (curr.$store) return curr;
+                curr = curr.$parent;
+            }
+        }
+
+        return null;
+    }
+
+    // ── 1.2) 词条反查与 DOM 解析辅助 ──────────────────────────────────
+    function findStatIdByText(rawText) {
+        if (!rawText) return null;
+        let clean = rawText
+            .replace(/^(pseudo|explicit|implicit|fractured|crafted|enchant|rune|sanctum|伪属性|主要词缀|基底词缀|附魔|分裂|工艺)[\s:]*/i, '')
+            .replace(/\s*\(pseudo\)\s*$/i, '')
+            .replace(/\s*\(implicit\)\s*$/i, '')
+            .replace(/\s*\(explicit\)\s*$/i, '')
+            .trim();
+
+        const norm = (s) => s.replace(/[\d\.]+/g, '#').replace(/[\s\+]/g, '').toLowerCase();
+        const cleanNorm = norm(clean);
+
+        for (const cat of txTradeFormatstats) {
+            for (const entry of (cat.entries || [])) {
+                if (!entry.id || !entry.text) continue;
+                const entryNorm = norm(entry.text);
+                if (entryNorm === cleanNorm) {
+                    return entry.id;
+                }
+            }
+        }
+        for (const cat of txTradeFormatstats) {
+            for (const entry of (cat.entries || [])) {
+                if (!entry.id || !entry.text) continue;
+                const entryNorm = norm(entry.text);
+                if (cleanNorm.includes(entryNorm) || entryNorm.includes(cleanNorm)) {
+                    return entry.id;
+                }
+            }
+        }
+        return null;
+    }
+
+    // 从 live Vue 组件中提取筛选组数据
+    function extractStatsFromComponents() {
+        const groups = [];
+        const groupElements = document.querySelectorAll('.filter-group');
+        groupElements.forEach(el => {
+            const v = el.__vue__;
+            if (v) {
+                const g = v.group || (v.$props && v.$props.group) || v.statGroup || v.filterGroup;
+                if (g && (Array.isArray(g.filters) || g.type)) {
+                    groups.push(JSON.parse(JSON.stringify(g)));
+                }
+            }
+        });
+        return groups;
+    }
+
+    // 从 DOM 节点深度解析筛选组与词条数据（兜底）
+    function extractStatsFromDOM() {
+        const groups = [];
+        const groupEls = document.querySelectorAll('.filter-group');
+        if (!groupEls || !groupEls.length) return groups;
+
+        groupEls.forEach(groupEl => {
+            // 确定组类型
+            let type = 'and';
+            const typeText = groupEl.querySelector('.filter-group-header .multiselect__single, .filter-group-select, .multiselect')?.textContent || '';
+            const lowerTypeText = typeText.toLowerCase();
+            if (lowerTypeText.includes('weight') || typeText.includes('加权')) type = 'weight';
+            else if (lowerTypeText.includes('count') || typeText.includes('计数')) type = 'count';
+            else if (lowerTypeText.includes('not') || typeText.includes('非')) type = 'not';
+            else if (lowerTypeText.includes('if') || typeText.includes('条件')) type = 'if';
+            else if (lowerTypeText.includes('and') || typeText.includes('全部')) type = 'and';
+
+            // 确定组 min / max
+            const valObj = {};
+            const headerInputs = groupEl.querySelectorAll('.filter-group-header input');
+            headerInputs.forEach(inp => {
+                const p = (inp.getAttribute('placeholder') || '').toLowerCase();
+                const cls = (inp.className || '').toLowerCase();
+                const v = inp.value.trim();
+                if (v !== '') {
+                    if (p.includes('min') || cls.includes('min')) valObj.min = Number(v);
+                    else if (p.includes('max') || cls.includes('max')) valObj.max = Number(v);
+                    else if (valObj.min == null) valObj.min = Number(v);
+                    else if (valObj.max == null) valObj.max = Number(v);
+                }
+            });
+
+            // 提取各个词条
+            const filters = [];
+            const rowEls = groupEl.querySelectorAll('.filter, .filter-body .filter-line, .filter-group-body > div');
+            rowEls.forEach(row => {
+                let filterId = null;
+                let filterVal = {};
+                let filterText = '';
+                let filterDisabled = false;
+
+                if (row.__vue__) {
+                    const vf = row.__vue__.filter || (row.__vue__.$props && row.__vue__.$props.filter) || row.__vue__.item;
+                    if (vf && vf.id) {
+                        filterId = vf.id;
+                        filterVal = vf.value ? JSON.parse(JSON.stringify(vf.value)) : {};
+                        filterDisabled = !!vf.disabled;
+                        if (vf.text) filterText = vf.text;
+                    }
+                }
+
+                const textEl = row.querySelector('.multiselect__single, .multiselect__tags, .filter-title, .selected-item');
+                if (textEl && !filterText) {
+                    filterText = textEl.textContent.replace(/\s+/g, ' ').trim();
+                }
+
+                const inputs = row.querySelectorAll('input:not([type="checkbox"])');
+                inputs.forEach(inp => {
+                    const p = (inp.getAttribute('placeholder') || '').toLowerCase();
+                    const v = inp.value.trim();
+                    if (v !== '') {
+                        if (type === 'weight' || p.includes('weight') || p.includes('权重')) {
+                            filterVal.weight = Number(v);
+                        } else if (p.includes('min')) {
+                            filterVal.min = Number(v);
+                        } else if (p.includes('max')) {
+                            filterVal.max = Number(v);
+                        } else if (type === 'weight' && filterVal.weight == null) {
+                            filterVal.weight = Number(v);
+                        }
+                    }
+                });
+
+                if (!filterId && filterText) {
+                    filterId = findStatIdByText(filterText);
+                }
+
+                if (filterId || filterText) {
+                    filters.push({
+                        id: filterId || `custom.${filterText}`,
+                        text: filterText,
+                        value: filterVal,
+                        disabled: filterDisabled
+                    });
+                }
+            });
+
+            if (filters.length > 0 || Object.keys(valObj).length > 0) {
+                groups.push({
+                    type: type,
+                    value: valObj,
+                    filters: filters,
+                    disabled: false
+                });
+            }
+        });
+
+        return groups;
+    }
+
+    // ── 1.3) 多层级读取当前集市词缀组 ──────────────────────────────────
+    function getCurrentStats() {
+        const app = getVueApp();
+
+        // Tier 1: Vuex store 中的 query.stats
+        if (app && app.$store && app.$store.state) {
+            const s = app.$store.state;
+            const candidates = [
+                s.query?.query?.stats,
+                s.query?.stats,
+                s.stats,
+                s.search?.query?.stats,
+                s.search?.stats
+            ];
+            for (const cand of candidates) {
+                if (Array.isArray(cand) && cand.some(g => (g.filters && g.filters.length > 0) || (g.value && Object.keys(g.value).length > 0))) {
+                    return JSON.parse(JSON.stringify(cand));
+                }
+            }
+        }
+
+        // Tier 2: Vue 根实例上的 query.stats
+        if (app && app.query) {
+            const candidates = [
+                app.query.query?.stats,
+                app.query.stats
+            ];
+            for (const cand of candidates) {
+                if (Array.isArray(cand) && cand.some(g => (g.filters && g.filters.length > 0) || (g.value && Object.keys(g.value).length > 0))) {
+                    return JSON.parse(JSON.stringify(cand));
+                }
+            }
+        }
+
+        // Tier 3: 从 live Vue 组件 (.filter-group) 提取
+        const componentGroups = extractStatsFromComponents();
+        if (componentGroups.some(g => (g.filters && g.filters.length > 0) || (g.value && Object.keys(g.value).length > 0))) {
+            return componentGroups;
+        }
+
+        // Tier 4: 从最近一次捕获的网络请求 (/api/trade2/search) 中提取
+        if (window.__poe2tb_last_search_query && Array.isArray(window.__poe2tb_last_search_query.stats) && window.__poe2tb_last_search_query.stats.length > 0) {
+            return JSON.parse(JSON.stringify(window.__poe2tb_last_search_query.stats));
+        }
+
+        // Tier 5: DOM 深度解析兜底
+        const domGroups = extractStatsFromDOM();
+        if (domGroups.length > 0) {
+            return domGroups;
+        }
+
+        // 最后回退：如果上面有任何哪怕空的 candidates
+        if (componentGroups.length > 0) return componentGroups;
+        return [];
+    }
 
     // ── 2) 预设存储管理 ───────────────────────────────────────────────
     function getSavedPresets() {
@@ -148,9 +384,8 @@
         document.body.appendChild(modal);
 
         saveButton.addEventListener('click', () => {
-            const app = window.app || (window.unsafeWindow && window.unsafeWindow.app);
-            const stats = app && app.query && app.query.query && app.query.query.stats;
-            const statGroup = stats && stats[currentStatIndex];
+            const stats = getCurrentStats();
+            const statGroup = (stats && currentStatIndex >= 0 && stats[currentStatIndex]) || (stats && stats[0]);
             if (!statGroup) {
                 alert('未获取到当前词缀组数据，请确认词缀组有效');
                 return;
@@ -174,9 +409,7 @@
             setSavedPresets(presets);
             modal.style.display = 'none';
             input.value = '';
-
-            const inp = document.querySelector('.poe2tb-preset-input-container input');
-            if (inp) inp.dispatchEvent(new Event('input'));
+            refreshAllPresetDropdowns();
         });
 
         cancelButton.addEventListener('click', () => {
@@ -249,7 +482,7 @@
                     item.appendChild(nameSpan);
 
                     item.addEventListener('click', () => {
-                        const app = window.app || (window.unsafeWindow && window.unsafeWindow.app);
+                        const app = getVueApp();
                         if (app && app.$store) {
                             app.$store.commit("pushStatGroup", JSON.parse(JSON.stringify(option.query)));
                         }
@@ -300,6 +533,117 @@
         statsDiv.appendChild(container);
     }
 
+    function formatTypeLabel(type) {
+        const map = {
+            count: '计数',
+            weight: '加权',
+            and: '全部',
+            not: '非',
+            if: '条件'
+        };
+        return map[type] || type || '筛选';
+    }
+
+    function populateWeightSelect(selectBox) {
+        if (!selectBox) return;
+        selectBox.innerHTML = '';
+
+        const defaultOpt = document.createElement('option');
+        defaultOpt.value = '';
+        defaultOpt.text = '预设综合选项（权重/计数/条件）';
+        selectBox.appendChild(defaultOpt);
+
+        const customPresets = getSavedPresets();
+        if (customPresets && customPresets.length > 0) {
+            const group = document.createElement('optgroup');
+            group.label = '── 自定义预设 ──';
+            customPresets.forEach((p, idx) => {
+                const opt = document.createElement('option');
+                opt.value = `custom:${idx}`;
+                const q = p.query || {};
+                const typeLabel = formatTypeLabel(q.type || p.type);
+                let valStr = '';
+                const v = q.value || p.value;
+                if (v && v.min != null && v.min !== '') valStr += ` min:${v.min}`;
+                if (v && v.max != null && v.max !== '') valStr += ` max:${v.max}`;
+                const filterCount = (q.filters && q.filters.length) || (p.filters && p.filters.length) || 0;
+                opt.text = `${p.name} [${typeLabel}${valStr}] (${filterCount}条)`;
+                group.appendChild(opt);
+            });
+            selectBox.appendChild(group);
+        }
+
+        const builtinKeys = Object.keys(weightSum);
+        if (builtinKeys.length > 0) {
+            const group = document.createElement('optgroup');
+            group.label = '── 内置综合权重 ──';
+            builtinKeys.forEach(key => {
+                const opt = document.createElement('option');
+                opt.value = `builtin:${key}`;
+                opt.text = key;
+                group.appendChild(opt);
+            });
+            selectBox.appendChild(group);
+        }
+    }
+
+    function handleWeightSelectChange(event, selectBox) {
+        event.preventDefault();
+        const val = event.target.value;
+        if (!val) return;
+
+        const app = getVueApp();
+        if (!app || !app.$store) {
+            console.warn('[PoE2TB] 未找到页面 Vue store 实例');
+            return;
+        }
+
+        if (val.startsWith('custom:')) {
+            const idx = Number(val.replace('custom:', ''));
+            const presets = getSavedPresets();
+            const p = presets[idx];
+            if (p && p.query) {
+                app.$store.commit('pushStatGroup', JSON.parse(JSON.stringify(p.query)));
+            }
+        } else if (val.startsWith('builtin:')) {
+            const key = val.replace('builtin:', '');
+            const weights = weightSum[key];
+            if (weights) {
+                const newStat = {
+                    type: 'weight',
+                    value: { min: 1 },
+                    filters: [],
+                    disabled: false
+                };
+
+                txTradeFormatstats.forEach(a => {
+                    a.entries.forEach(e => {
+                        const findW = weights.find(w => w.id == e.id.split('.')[1]);
+                        if (findW) {
+                            newStat.filters.push({
+                                id: e.id,
+                                value: { weight: findW.value },
+                                disabled: false
+                            });
+                        }
+                    });
+                });
+                app.$store.commit('pushStatGroup', newStat);
+            }
+        }
+        selectBox.value = '';
+    }
+
+    function refreshAllPresetDropdowns() {
+        document.querySelectorAll('.poe2tb-weight-select').forEach(sel => {
+            populateWeightSelect(sel);
+        });
+        const inp = document.querySelector('.poe2tb-preset-input-container input');
+        if (inp) {
+            inp.dispatchEvent(new Event('input'));
+        }
+    }
+
     function initSumSelect() {
         const initInterval = setInterval(() => {
             const targetSelect = document.querySelector('.multiselect.filter-select.filter-group-select');
@@ -318,54 +662,10 @@
                 selectBox.style.marginTop = '16px';
                 selectBox.style.color = '#e8c987';
 
-                const defaultOpt = document.createElement('option');
-                defaultOpt.value = '';
-                defaultOpt.text = '预设综合选项（权重）';
-                selectBox.appendChild(defaultOpt);
+                populateWeightSelect(selectBox);
 
-                Object.keys(weightSum).forEach(key => {
-                    const opt = document.createElement('option');
-                    opt.value = key;
-                    opt.text = key;
-                    selectBox.appendChild(opt);
-                });
-
+                selectBox.addEventListener('change', (e) => handleWeightSelectChange(e, selectBox));
                 statsDiv.appendChild(selectBox);
-
-                selectBox.addEventListener('change', function (event) {
-                    event.preventDefault();
-                    if (event.target.value) {
-                        const weights = weightSum[event.target.value];
-                        if (!weights) return;
-
-                        const newStat = {
-                            type: 'weight',
-                            value: { min: 1 },
-                            filters: [],
-                            disabled: false
-                        };
-
-                        txTradeFormatstats.forEach(a => {
-                            a.entries.forEach(e => {
-                                const findW = weights.find(w => w.id == e.id.split('.')[1]);
-                                if (findW) {
-                                    newStat.filters.push({
-                                        id: e.id,
-                                        value: { weight: findW.value },
-                                        disabled: false
-                                    });
-                                }
-                            });
-                        });
-
-                        const app = window.app || (window.unsafeWindow && window.unsafeWindow.app);
-                        if (app && app.$store) {
-                            app.$store.commit('pushStatGroup', newStat);
-                        } else {
-                            console.error('[PoE2TB] 未找到页面 Vue store 实例');
-                        }
-                    }
-                });
             }
 
             initSlectMy();
@@ -413,14 +713,51 @@
     initSumSelect();
     initSaveButtons();
 
-    // 监听隔离世界（如侧边栏）通过 postMessage 发送的载入预设指令
+    // 监听隔离世界（如侧边栏）通过 postMessage 发送的指令
     window.addEventListener('message', (e) => {
         if (e.source !== window || !e.data) return;
+
+        // 预设数据更新，同步刷新下拉框
+        if (e.data.__poe2tb_presets_updated) {
+            refreshAllPresetDropdowns();
+        }
+
+        // 载入预设指令
         if (e.data.__poe2tb_apply_preset && e.data.query) {
-            const app = window.app || (window.unsafeWindow && window.unsafeWindow.app);
+            const app = getVueApp();
             if (app && app.$store) {
                 app.$store.commit('pushStatGroup', JSON.parse(JSON.stringify(e.data.query)));
+            } else {
+                console.warn('[PoE2TB] applyPreset: 未找到 Vuex store');
             }
+        }
+
+        // 响应当前页面词缀组读取请求（供侧边栏一键抓取）
+        if (e.data.__poe2tb_get_current_stats) {
+            const stats = getCurrentStats();
+
+            const statTextMap = {};
+            txTradeFormatstats.forEach(a => {
+                (a.entries || []).forEach(entry => {
+                    if (entry.id && entry.text) statTextMap[entry.id] = entry.text;
+                });
+            });
+
+            // 若提取到的 filter 条目自带 text，补充进入 statTextMap
+            stats.forEach(g => {
+                (g.filters || []).forEach(f => {
+                    if (f.id && f.text && !statTextMap[f.id]) {
+                        statTextMap[f.id] = f.text;
+                    }
+                });
+            });
+
+            window.postMessage({
+                __poe2tb_current_stats_reply: true,
+                requestId: e.data.requestId,
+                stats: JSON.parse(JSON.stringify(stats)),
+                statTextMap
+            }, '*');
         }
     });
 
@@ -428,8 +765,9 @@
     window.__PoE2TB_PRESETS = {
         getPresets: getSavedPresets,
         savePresets: setSavedPresets,
+        getCurrentStats,
         applyPreset(presetQuery) {
-            const app = window.app || (window.unsafeWindow && window.unsafeWindow.app);
+            const app = getVueApp();
             if (app && app.$store) {
                 app.$store.commit('pushStatGroup', JSON.parse(JSON.stringify(presetQuery)));
                 return true;

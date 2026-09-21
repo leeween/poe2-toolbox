@@ -10,8 +10,6 @@ const FEATURES = [
     { id: 'pob', name: '复制 PoB', desc: '在结果行加按钮，复制 Path of Building 文本（POE2）' },
     { id: 'view-mods', name: '查看词缀', desc: '查看物品类型在 poe2db 的全部可出词缀' },
     { id: 'megalomaniac', name: '妄想症统计', desc: '统计 poe.ninja 构筑里 Megalomaniac 词条出现次数' },
-    { id: 'trade-tw', name: '国际服汉化', desc: '国际服集市界面与装备繁体中文化（仅国际服生效）' },
-    { id: 'stat-presets', name: '词缀搜索预设', desc: '高级词缀权重预设与自定义预设组保存（仅国际服生效）' },
 ];
 
 function sendBg(msg) {
@@ -31,14 +29,22 @@ function sendBg(msg) {
 async function loadEnabled() {
     const { [ENABLED_KEY]: raw } = await chrome.storage.local.get({ [ENABLED_KEY]: {} });
     if (!raw) return { qq: {}, intl: {} };
-    if (raw.qq || raw.intl) return { qq: raw.qq || {}, intl: raw.intl || {} };
-    // 旧扁平结构 → 视作国服设置
-    const migrated = { qq: {}, intl: {} };
-    for (const [id, val] of Object.entries(raw)) {
-        if (typeof val === 'boolean') migrated.qq[id] = val;
+    const res = (raw.qq || raw.intl) ? { qq: raw.qq || {}, intl: raw.intl || {} } : { qq: {}, intl: {} };
+    if (!raw.qq && !raw.intl) {
+        for (const [id, val] of Object.entries(raw)) {
+            if (typeof val === 'boolean') res.qq[id] = val;
+        }
     }
-    await chrome.storage.local.set({ [ENABLED_KEY]: migrated });
-    return migrated;
+    // 清理已移至侧边栏面板自主管理的旧键
+    ['qq', 'intl'].forEach(scope => {
+        if (res[scope]) {
+            delete res[scope]['search-enhance'];
+            delete res[scope]['trade-tw'];
+            delete res[scope]['stat-presets'];
+        }
+    });
+    await chrome.storage.local.set({ [ENABLED_KEY]: res });
+    return res;
 }
 
 async function renderFeatures() {

@@ -441,6 +441,13 @@ body.tb-active.tb-collapsed {
     background: var(--tb-bg2);
     cursor: pointer;
     transition: all .15s ease;
+    display: block;
+    text-decoration: none;
+    color: inherit;
+}
+
+.tb-list-item:visited {
+    color: inherit;
 }
 
 .tb-list-item:hover {
