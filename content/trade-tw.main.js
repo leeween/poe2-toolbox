@@ -22,15 +22,53 @@
         notablesByEnName = {}
     } = dict;
 
+    // 武器/装备类别对照表
+    const ITEM_CLASS_MAP = {
+        'One Hand Mace': '單手錘',
+        'Two Hand Mace': '雙手錘',
+        'One Hand Sword': '單手劍',
+        'Two Hand Sword': '雙手劍',
+        'One Hand Axe': '單手斧',
+        'Two Hand Axe': '雙手斧',
+        'Bow': '弓',
+        'Crossbow': '十字弓',
+        'Quarterstaff': '細杖',
+        'Staff': '長杖',
+        'Wand': '法杖',
+        'Sceptre': '權杖',
+        'Dagger': '匕首',
+        'Claw': '爪',
+        'Flail': '鏈錘',
+        'Spear': '長鋒',
+        'Shield': '盾牌',
+        'Focus': '聚能器',
+        'Body Armour': '胸甲',
+        'Boots': '鞋子',
+        'Gloves': '手套',
+        'Helmet': '頭盔',
+        'Amulet': '護身符',
+        'Ring': '戒指',
+        'Belt': '腰帶',
+        'Jewel': '珠寶',
+        'Charm': '護符',
+        'Relic': '聖物',
+        'Mace': '錘',
+        'Sword': '劍',
+        'Axe': '斧'
+    };
+
     // 属性翻译工具函数
     function trans4twProps(text) {
         if (twProps[text]) return twProps[text];
+        if (ITEM_CLASS_MAP[text]) return ITEM_CLASS_MAP[text];
         const list = text.split(' ');
         if (list.length > 1) {
             return list.map(a => trans4twProps(a)).join(' ');
         } else {
             const find = Object.keys(twProps).find(a => text.includes(a));
             if (find) return text.replace(find, twProps[find]);
+            const classFind = Object.keys(ITEM_CLASS_MAP).find(a => text.includes(a));
+            if (classFind) return text.replace(classFind, ITEM_CLASS_MAP[classFind]);
         }
         return list.join(' ');
     }
@@ -39,7 +77,7 @@
     const TW_ENABLED_KEY = 'poe2tb_tw_enabled';
     const TW_REVISION_KEY = 'poe2tb_tw_revision';
     const TW_DATAMAP_KEY = 'poe2tb_tw_dataMap';
-    const CURRENT_REVISION = '4.29.0-lang-tc-20260909';
+    const CURRENT_REVISION = '4.29.1-lang-tc-20260922';
 
     function isTwEnabled() {
         return localStorage.getItem(TW_ENABLED_KEY) !== '0';
@@ -57,8 +95,11 @@
         if (raw) dataMap = JSON.parse(raw);
     } catch (e) { dataMap = {}; }
 
+    let statsIndex = null;
+
     function saveDataMap(newMap) {
         dataMap = newMap || dataMap;
+        statsIndex = null;
         try {
             localStorage.setItem(TW_DATAMAP_KEY, JSON.stringify(dataMap));
         } catch (e) {}
@@ -648,37 +689,223 @@ var ajaxHooker = function() {
 }();
 
     // ── 4) 词缀匹配与响应改写逻辑 ─────────────────────────────────────
-const fieldsToTranslate = ['baseType', 'name', 'typeLine'];
-    const whisperMap = {}
+    const fieldsToTranslate = ['baseType', 'name', 'typeLine'];
+    const whisperMap = {};
+
     function plainStatText(text) {
-        return String(text || '').replace(/\[[^|\]]*\|([^\]]*)\]/g, '$1').replace(/[\[\]]/g, '').replace(/\s+/g, ' ').trim()
+        return String(text || '')
+            .replace(/\[[^|\]]*\|([^\]]*)\]/g, '$1')
+            .replace(/[\[\]]/g, '')
+            .replace(/\s*\(local\)/ig, '')
+            .replace(/\s+/g, ' ')
+            .trim();
     }
+
     function statSourceKey(text) {
-        let hash = 2166136261
+        let hash = 2166136261;
         for (const character of String(text || '')) {
-            hash ^= character.charCodeAt(0)
-            hash = Math.imul(hash, 16777619)
+            hash ^= character.charCodeAt(0);
+            hash = Math.imul(hash, 16777619);
         }
-        return (hash >>> 0).toString(36)
+        return (hash >>> 0).toString(36);
     }
+
+    function normalizeTemplateKey(text) {
+        return plainStatText(text)
+            .replace(/[+-]?(?:\d+(?:\.\d+)?|\.\d+)/g, '#')
+            .toLowerCase();
+    }
+
     function statTemplateMatches(template, text) {
-        if (!template || !text) return false
-        const escaped = plainStatText(template).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        const pattern = escaped.replace(/#/g, '[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)')
-        return new RegExp(`^${pattern}$`, 'i').test(plainStatText(text))
+        if (!template || !text) return false;
+        const cleanTemplate = plainStatText(template);
+        const cleanText = plainStatText(text);
+        const escaped = cleanTemplate.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const pattern = escaped.replace(/#/g, '[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)');
+        return new RegExp(`^${pattern}$`, 'i').test(cleanText);
     }
+
+    function ensureStatsIndex() {
+        if (statsIndex && statsIndex.source === dataMap['stats']) {
+            return statsIndex;
+        }
+        if (!dataMap['stats'] || !Array.isArray(dataMap['stats'])) {
+            return null;
+        }
+        const byId = new Map();
+        const byGroupAndId = new Map();
+        const byGroupAndTemplate = new Map();
+        const byTemplate = new Map();
+
+        for (const group of dataMap['stats']) {
+            if (!group || !Array.isArray(group.entries)) continue;
+            const gIdMap = new Map();
+            const gTplMap = new Map();
+            byGroupAndId.set(group.id, gIdMap);
+            byGroupAndTemplate.set(group.id, gTplMap);
+
+            for (const entry of group.entries) {
+                if (!entry || !entry.id) continue;
+                byId.set(entry.id, entry);
+                gIdMap.set(entry.id, entry);
+                const shortId = String(entry.id).split('.').pop();
+                if (!gIdMap.has(shortId)) gIdMap.set(shortId, entry);
+                if (!byId.has(shortId)) byId.set(shortId, entry);
+
+                if (entry.enText) {
+                    const norm = normalizeTemplateKey(entry.enText);
+                    if (norm) {
+                        if (!gTplMap.has(norm)) gTplMap.set(norm, entry);
+                        if (!byTemplate.has(norm)) byTemplate.set(norm, entry);
+                    }
+                }
+            }
+        }
+
+        statsIndex = {
+            source: dataMap['stats'],
+            byId,
+            byGroupAndId,
+            byGroupAndTemplate,
+            byTemplate
+        };
+        return statsIndex;
+    }
+
+    function resolveMod(item, modKey, modItem, index, indexHelper) {
+        const isObject = typeof modItem === 'object' && modItem !== null;
+        const oldText = isObject ? (modItem.description || '') : String(modItem || '');
+        if (!oldText) return null;
+
+        const hash = isObject ? (modItem.hash || '') : '';
+        const domain = isObject ? (modItem.domain || '') : '';
+        const baseGroupKey = modKey.replace(/Mods$/, '');
+
+        const { byId, byGroupAndId, byGroupAndTemplate, byTemplate } = indexHelper;
+
+        function checkMatch(entry) {
+            if (!entry || !entry.twText) return null;
+            if (statTemplateMatches(entry.enText, oldText)) return entry;
+            return null;
+        }
+
+        // 1. 若 modItem 自带 hash，精准匹配且校验模板一致
+        if (hash) {
+            const shortId = String(hash).split('.').pop();
+            const groupPriority = [domain, baseGroupKey].filter(Boolean);
+            for (const gId of groupPriority) {
+                const groupMap = byGroupAndId.get(gId);
+                if (groupMap) {
+                    const candidate = groupMap.get(hash) || groupMap.get(shortId);
+                    const match = checkMatch(candidate);
+                    if (match) return match;
+                }
+            }
+            const globalCandidate = byId.get(hash) || byId.get(shortId);
+            const globalMatch = checkMatch(globalCandidate);
+            if (globalMatch) return globalMatch;
+        }
+
+        // 2. 检查物品 extended.hashes 元数据
+        const extendedHashes = item.extended && item.extended.hashes;
+        if (extendedHashes) {
+            const checkedHashes = new Set();
+            const hashBuckets = [
+                domain && extendedHashes[domain],
+                extendedHashes[baseGroupKey]
+            ].filter(Boolean);
+
+            for (const bucket of hashBuckets) {
+                if (!Array.isArray(bucket)) continue;
+                for (const pair of bucket) {
+                    if (!Array.isArray(pair) || !pair[0]) continue;
+                    const statId = pair[0];
+                    const lines = Array.isArray(pair[1]) ? pair[1] : [];
+                    if (lines.includes(index) && !checkedHashes.has(statId)) {
+                        checkedHashes.add(statId);
+                        const shortId = String(statId).split('.').pop();
+                        const candidate = byId.get(statId) || byId.get(shortId);
+                        const match = checkMatch(candidate);
+                        if (match) return match;
+                    }
+                }
+                for (const pair of bucket) {
+                    if (!Array.isArray(pair) || !pair[0]) continue;
+                    const statId = pair[0];
+                    if (!checkedHashes.has(statId)) {
+                        checkedHashes.add(statId);
+                        const shortId = String(statId).split('.').pop();
+                        const candidate = byId.get(statId) || byId.get(shortId);
+                        const match = checkMatch(candidate);
+                        if (match) return match;
+                    }
+                }
+            }
+
+            for (const bKey of Object.keys(extendedHashes)) {
+                const bucket = extendedHashes[bKey];
+                if (!Array.isArray(bucket)) continue;
+                for (const pair of bucket) {
+                    if (!Array.isArray(pair) || !pair[0]) continue;
+                    const statId = pair[0];
+                    if (!checkedHashes.has(statId)) {
+                        checkedHashes.add(statId);
+                        const shortId = String(statId).split('.').pop();
+                        const candidate = byId.get(statId) || byId.get(shortId);
+                        const match = checkMatch(candidate);
+                        if (match) return match;
+                    }
+                }
+            }
+        }
+
+        // 3. 基于归一化模板哈希快速 O(1) 索引匹配
+        const norm = normalizeTemplateKey(oldText);
+        if (norm) {
+            const groupPriority = [domain, baseGroupKey, 'explicit', 'crafted', 'fractured', 'desecrated', 'rune', 'implicit', 'enchant'].filter(Boolean);
+            const seen = new Set();
+            for (const gId of groupPriority) {
+                if (seen.has(gId)) continue;
+                seen.add(gId);
+                const gTplMap = byGroupAndTemplate.get(gId);
+                if (gTplMap) {
+                    const candidate = gTplMap.get(norm);
+                    const match = checkMatch(candidate);
+                    if (match) return match;
+                }
+            }
+            const globalCandidate = byTemplate.get(norm);
+            const globalMatch = checkMatch(globalCandidate);
+            if (globalMatch) return globalMatch;
+        }
+
+        // 4. 正则模板兜底遍历查找
+        const searchGroups = [domain, baseGroupKey, 'explicit', 'crafted', 'fractured', 'desecrated', 'rune', 'implicit', 'enchant'];
+        const seenGroups = new Set();
+        for (const gId of searchGroups) {
+            if (!gId || seenGroups.has(gId)) continue;
+            seenGroups.add(gId);
+            const group = dataMap['stats'].find(g => g.id === gId);
+            if (!group || !Array.isArray(group.entries)) continue;
+            for (const entry of group.entries) {
+                const match = checkMatch(entry);
+                if (match) return match;
+            }
+        }
+
+        return null;
+    }
+
     function findStatEntry(group, candidateId, originalText) {
-        if (!group || !group.entries || !candidateId) return null
-        const id = String(candidateId)
-        const shortId = id.split('.').pop()
+        if (!group || !group.entries || !candidateId) return null;
+        const id = String(candidateId);
+        const shortId = id.split('.').pop();
         const candidates = group.entries.filter(entry => {
-            const entryId = String(entry.id)
-            return entryId === id || entryId.split('.').pop() === shortId
-        })
-        if (candidates.length <= 1) return candidates[0] || null
-        return candidates.find(entry => statTemplateMatches(entry.enText, originalText)) || candidates[0]
+            const entryId = String(entry.id);
+            return entryId === id || entryId.split('.').pop() === shortId;
+        });
+        return candidates.find(entry => statTemplateMatches(entry.enText, originalText)) || null;
     }
-    
 
     if (isTwEnabled()) {
         ajaxHooker.hook(request => {
@@ -707,86 +934,60 @@ const fieldsToTranslate = ['baseType', 'name', 'typeLine'];
                                 }
                                 item.item.typeLine = translatedTypeLine
                             }
-                            if( dataMap['stats'] && dataMap['stats'].length ){
-                                if (item.item.extended.hashes) {
-                                    const keys = Object.keys(item.item.extended.hashes)
+                            const sIndex = ensureStatsIndex();
+                            if (sIndex) {
+                                const MOD_KEYS = [
+                                    'explicitMods',
+                                    'implicitMods',
+                                    'runeMods',
+                                    'enchantMods',
+                                    'fracturedMods',
+                                    'craftedMods',
+                                    'sanctumMods',
+                                    'scourgeMods',
+                                    'mutatedMods'
+                                ];
 
-                                    keys.forEach(key => {
-                                        const mods = item.item.extended.hashes[key]
-                                        const entry = dataMap['stats'].find(a => a.id == key)
-                                        const modTexts = item.item[key + 'Mods']
+                                MOD_KEYS.forEach(modKey => {
+                                    const modTexts = item.item[modKey];
+                                    if (!Array.isArray(modTexts) || modTexts.length === 0) return;
 
-                                        if (entry && entry.entries && modTexts) {
-                                            const newModTexts = modTexts.map((modItem, index) => {
-                                                let oldText = ''
-                                                let hash = ''
-                                                const isObject = typeof modItem === 'object' && modItem !== null
+                                    item.item[modKey] = modTexts.map((modItem, index) => {
+                                        const isObject = typeof modItem === 'object' && modItem !== null;
+                                        const oldText = isObject ? (modItem.description || '') : String(modItem || '');
+                                        const mod = resolveMod(item.item, modKey, modItem, index, sIndex);
 
-                                                // 根据数据结构类型，提取对应文本和 hash
-                                                if (isObject) {
-                                                    oldText = modItem.description || ''
-                                                    hash = modItem.hash || ''
-                                                } else {
-                                                    oldText = modItem || ''
+                                        if (mod && mod.twText) {
+                                            let newModText = mod.twText;
+                                            const values = oldText.match(/[+-]?(\d*\.\d+|\d+)/g);
+                                            if (values) {
+                                                let i = 0;
+                                                newModText = newModText.replace(/#/g, () => values[i++] ?? '#');
+                                            }
+                                            if (mod.text && mod.text.indexOf('配置 #') > -1) {
+                                                const val = oldText.replace(/\[[^|\]]*\||[\][]/g, '').replace('Allocates', '').replaceAll("'", '').trim();
+                                                const findAllocate = allocates.find(a => a.en_text === val || a.en_text.replace("'", '') === val);
+                                                if (findAllocate) {
+                                                    newModText = mod.twText.replace(/#/, findAllocate.text);
                                                 }
-
-                                                let mod = null
-
-                                                // 1. 如果有 hash，优先使用 hash 精准查找
-                                                if (hash) {
-                                                    mod = findStatEntry(entry, hash, oldText)
-                                                }
-
-                                                // 2. 如果没有 hash（例如纯文本数组），或者通过 hash 没找到，则使用索引查找
-                                                if (!mod && mods) {
-                                                    const m = mods[index]
-                                                    if (m) {
-                                                        mod = findStatEntry(entry, m[0], oldText)
-                                                    }
-                                                }
-
-                                                if (mod && mod.twText) {
-                                                    let newModText = mod.twText
-                                                    const values = oldText.match(/[+-]?(\d*\.\d+|\d+)/g)
-                                                    if (values) {
-                                                        let i = 0
-                                                        values.forEach(v => {
-                                                            newModText = newModText.replace(/#/, values[i++])
-                                                        })
-                                                    }
-                                                    if (mod.text.indexOf('配置 #') > -1) {
-                                                        const val = oldText.replace(/\[[^|\]]*\||[\][]/g, '').replace('Allocates', '').replaceAll("'s", 's').trim()
-                                                        const findAllocate = allocates.find(a => a.en_text == val)
-                                                        if (findAllocate) {
-                                                            newModText = mod.twText.replace(/#/, findAllocate.text)
-                                                        }
-                                                    }
-                                                    if (newModText.match(/增加/) && oldText.match(/reduced/)) {
-                                                        newModText = newModText.replace(/增加/, '降低')
-                                                    }
-                                                    if (newModText.match(/提高/) && oldText.match(/reduced/)) {
-                                                        newModText = newModText.replace(/提高/, '降低')
-                                                    }
-                                                    if (newModText != oldText) {
-                                                        // 根据原数据类型，决定返回新对象还是新字符串
-                                                        if (isObject) {
-                                                            return {
-                                                                ...modItem,
-                                                                description: newModText
-                                                            }
-                                                        } else {
-                                                            return newModText
-                                                        }
-                                                    }
-                                                }
-
-                                                return modItem // 无需修改时，原样返回（对象或字符串）
-                                            })
-
-                                            item.item[key + 'Mods'] = newModTexts
+                                            }
+                                            if (newModText.match(/增加/) && oldText.match(/reduced/i)) {
+                                                newModText = newModText.replace(/增加/, '降低');
+                                            }
+                                            if (newModText.match(/提高/) && oldText.match(/reduced/i)) {
+                                                newModText = newModText.replace(/提高/, '降低');
+                                            }
+                                            if (newModText !== oldText) {
+                                                return isObject ? {
+                                                    ...modItem,
+                                                    description: newModText
+                                                } : newModText;
+                                            }
                                         }
-                                    })
-                                }
+
+                                        return modItem;
+                                    });
+                                });
                             }
 
                             //properties
@@ -980,6 +1181,7 @@ function replaceText(node) {
 
     // 递归替换元素节点中的文本内容
     function replaceTextInNode(node) {
+        if (!node || !node.childNodes) return;
         node.childNodes.forEach(child => {
             if (child.nodeType === 3) { // 文本节点
                 replaceText(child);
@@ -989,10 +1191,12 @@ function replaceText(node) {
         });
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => replaceTextInNode(document.body));
-    } else {
-        replaceTextInNode(document.body);
+    if (typeof document !== 'undefined') {
+        if (document.readyState === 'loading') {
+            document.addEventListener && document.addEventListener('DOMContentLoaded', () => replaceTextInNode(document.body));
+        } else if (document.body) {
+            replaceTextInNode(document.body);
+        }
     }
 
     function clearCacheAndReload() {
