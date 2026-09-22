@@ -98,6 +98,14 @@
     }
 
     function bindEvents() {
+        listEl.addEventListener('auxclick', (e) => {
+            const del = e.target.closest('.tb-item-del');
+            if (del) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        });
+
         listEl.addEventListener('click', async (e) => {
             const del = e.target.closest('.tb-item-del');
             if (del) {

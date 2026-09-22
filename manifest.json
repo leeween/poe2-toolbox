@@ -52,7 +52,6 @@
             ],
             "js": [
                 "content/pob-netcapture.main.js",
-                "lib/trade-tw-dict.js",
                 "content/stat-presets.main.js"
             ],
             "run_at": "document_start",
@@ -64,6 +63,7 @@
                 "https://pathofexile.com/trade2*"
             ],
             "js": [
+                "lib/trade-tw-dict.js",
                 "content/trade-tw.main.js"
             ],
             "run_at": "document_start",

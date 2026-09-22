@@ -44,7 +44,31 @@
     function savePresets(list) {
         try {
             localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(list));
+            if (ctx.storage && ctx.storage.setRaw) {
+                ctx.storage.setRaw(PRESETS_STORAGE_KEY, list).catch(() => {});
+            }
             window.postMessage({ __poe2tb_presets_updated: true }, '*');
+        } catch (e) {}
+    }
+
+    // 跨域与防清缓存同步：从 chrome.storage.local 同步或备份
+    async function syncPresetsFromExtensionStorage() {
+        try {
+            if (!ctx.storage || !ctx.storage.getRaw) return;
+            const extPresets = await ctx.storage.getRaw(PRESETS_STORAGE_KEY, null);
+            if (Array.isArray(extPresets) && extPresets.length > 0) {
+                const localPresets = getPresets();
+                if (!localPresets.length) {
+                    localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(extPresets));
+                    window.postMessage({ __poe2tb_presets_updated: true }, '*');
+                    if (listEl) render(listEl);
+                }
+            } else {
+                const localPresets = getPresets();
+                if (localPresets.length > 0) {
+                    ctx.storage.setRaw(PRESETS_STORAGE_KEY, localPresets).catch(() => {});
+                }
+            }
         } catch (e) {}
     }
 
@@ -189,6 +213,40 @@
             if: '条件'
         };
         return map[type] || type || '全部';
+    }
+
+    function syncFormToState(container) {
+        if (!container || !editingPreset) return;
+        const nameInput = container.querySelector('#tb-form-name');
+        if (nameInput) {
+            editingPreset.name = nameInput.value;
+        }
+
+        const typeSelect = container.querySelector('#tb-form-type');
+        if (typeSelect) {
+            if (!editingPreset.query) editingPreset.query = {};
+            editingPreset.query.type = typeSelect.value;
+        }
+
+        const minInput = container.querySelector('#tb-form-min');
+        const maxInput = container.querySelector('#tb-form-max');
+        const minVal = minInput && minInput.value.trim() !== '' ? Number(minInput.value.trim()) : null;
+        const maxVal = maxInput && maxInput.value.trim() !== '' ? Number(maxInput.value.trim()) : null;
+
+        if (!editingPreset.query) editingPreset.query = {};
+        if (!editingPreset.query.value) editingPreset.query.value = {};
+        if (minVal !== null) editingPreset.query.value.min = minVal;
+        else delete editingPreset.query.value.min;
+        if (maxVal !== null) editingPreset.query.value.max = maxVal;
+        else delete editingPreset.query.value.max;
+
+        container.querySelectorAll('.tb-filter-weight-input').forEach(inp => {
+            const idx = Number(inp.dataset.index);
+            if (formFilters[idx]) {
+                if (!formFilters[idx].value) formFilters[idx].value = {};
+                formFilters[idx].value.weight = inp.value !== '' ? Number(inp.value) : undefined;
+            }
+        });
     }
 
     function renderForm() {
@@ -362,7 +420,7 @@
                             <div style="display: flex; gap: 5px;">
                                 <button class="tb-btn tb-btn-primary tb-preset-apply" data-index="${index}" style="padding: 2px 8px; font-size: 11px;">填入</button>
                                 <button class="tb-btn tb-btn-secondary tb-preset-edit" data-index="${index}" style="padding: 2px 6px; font-size: 11px;">编辑</button>
-                                <button class="tb-btn tb-btn-secondary tb-preset-del" data-name="${escapeHtml(item.name)}" style="padding: 2px 6px; font-size: 11px; color: var(--tb-danger);" title="删除">×</button>
+                                <button class="tb-btn tb-btn-secondary tb-preset-del" data-index="${index}" style="padding: 2px 6px; font-size: 11px; color: var(--tb-danger);" title="删除">×</button>
                             </div>
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--tb-text-dim);">
@@ -457,6 +515,7 @@
 
             // 组类型切换时，如果从非 weight 切换到 weight，重置权重显示
             container.querySelector('#tb-form-type')?.addEventListener('change', (e) => {
+                syncFormToState(container);
                 if (editingPreset && editingPreset.query) {
                     editingPreset.query.type = e.target.value;
                 }
@@ -466,12 +525,10 @@
             // 从集市当前词缀组抓取
             container.querySelector('#tb-form-grab-btn')?.addEventListener('click', async () => {
                 ctx.ui.toast('正在读取当前集市词缀...', 'info');
+                syncFormToState(container);
 
                 // 记住用户在表单里已输入的预设名称
-                const curName = container.querySelector('#tb-form-name')?.value?.trim();
-                if (curName && editingPreset) {
-                    editingPreset.name = curName;
-                }
+                const curName = editingPreset && editingPreset.name ? editingPreset.name.trim() : '';
 
                 const result = await fetchCurrentStatsFromPage();
                 let stats = (result && result.stats) || [];
@@ -521,6 +578,7 @@
                     value: targetVal,
                     filters: formFilters.map(f => ({
                         id: f.id,
+                        text: f.text,
                         value: f.value,
                         disabled: f.disabled
                     }))
@@ -533,6 +591,7 @@
             // 词条移除
             container.querySelectorAll('.tb-filter-remove-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
+                    syncFormToState(container);
                     const idx = Number(btn.dataset.index);
                     formFilters.splice(idx, 1);
                     render(container);
@@ -552,31 +611,26 @@
 
             // 保存表单
             container.querySelector('#tb-form-save-btn')?.addEventListener('click', () => {
-                const nameInput = container.querySelector('#tb-form-name');
-                const nameVal = nameInput ? nameInput.value.trim() : '';
+                syncFormToState(container);
+                const nameVal = editingPreset && editingPreset.name ? editingPreset.name.trim() : '';
                 if (!nameVal) {
                     ctx.ui.toast('请输入预设名称', 'warning');
                     return;
                 }
 
-                const typeSelect = container.querySelector('#tb-form-type');
-                const typeVal = typeSelect ? typeSelect.value : 'count';
-
-                const minInput = container.querySelector('#tb-form-min');
-                const maxInput = container.querySelector('#tb-form-max');
-                const minVal = minInput && minInput.value.trim() !== '' ? Number(minInput.value.trim()) : null;
-                const maxVal = maxInput && maxInput.value.trim() !== '' ? Number(maxInput.value.trim()) : null;
-
-                const valObj = {};
-                if (minVal !== null) valObj.min = minVal;
-                if (maxVal !== null) valObj.max = maxVal;
+                const typeVal = (editingPreset.query && editingPreset.query.type) || 'count';
+                const valObj = (editingPreset.query && editingPreset.query.value) ? { ...editingPreset.query.value } : {};
 
                 const newQuery = {
                     type: typeVal,
                     value: valObj,
                     filters: formFilters.map(f => {
-                        const item = { id: f.id, disabled: !!f.disabled };
-                        if (f.value && Object.keys(f.value).length) item.value = f.value;
+                        const item = { id: f.id, text: f.text || f.id, disabled: !!f.disabled };
+                        const v = f.value ? { ...f.value } : {};
+                        if (typeVal === 'weight' && (v.weight == null || isNaN(v.weight))) {
+                            v.weight = 1;
+                        }
+                        if (Object.keys(v).length) item.value = v;
                         return item;
                     }),
                     disabled: false
@@ -584,7 +638,7 @@
 
                 const current = getPresets();
                 // 若原预设存在同名或在编辑状态，进行覆盖或替换
-                const editOriginalName = editingPreset && editingPreset.name ? editingPreset.name : '';
+                const editOriginalName = editingPreset && editingPreset._originalName ? editingPreset._originalName : '';
                 let idx = editOriginalName ? current.findIndex(p => p.name === editOriginalName) : -1;
                 if (idx === -1) {
                     idx = current.findIndex(p => p.name === nameVal);
@@ -624,9 +678,10 @@
                 const item = list[idx];
                 if (item) {
                     editingPreset = JSON.parse(JSON.stringify(item));
+                    editingPreset._originalName = item.name;
                     formFilters = (item.query && item.query.filters ? item.query.filters : []).map(f => ({
                         id: f.id,
-                        text: f.id,
+                        text: f.text || f.id,
                         value: f.value ? JSON.parse(JSON.stringify(f.value)) : {},
                         disabled: !!f.disabled
                     }));
@@ -637,13 +692,16 @@
 
         container.querySelectorAll('.tb-preset-del').forEach(btn => {
             btn.addEventListener('click', async () => {
-                const name = btn.dataset.name;
-                const ok = await ctx.ui.confirm('删除预设', `确定删除预设「${name}」吗？`, '删除', '取消');
+                const list = getPresets();
+                const idx = Number(btn.dataset.index);
+                const item = list[idx];
+                if (!item) return;
+                const ok = await ctx.ui.confirm('删除预设', `确定删除预设「${item.name}」吗？`, '删除', '取消');
                 if (!ok) return;
-                const next = getPresets().filter(p => p.name !== name);
-                savePresets(next);
+                list.splice(idx, 1);
+                savePresets(list);
                 render(container);
-                ctx.ui.toast(`已删除预设：${name}`, 'info');
+                ctx.ui.toast(`已删除预设：${item.name}`, 'info');
             });
         });
     }
@@ -658,6 +716,7 @@
         mount(panelEl) {
             listEl = panelEl;
             render(panelEl);
+            syncPresetsFromExtensionStorage();
 
             // 监听页面发来的预设变更消息
             const msgListener = (e) => {

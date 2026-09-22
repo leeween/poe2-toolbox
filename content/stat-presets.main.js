@@ -5,51 +5,24 @@
 
     const PRESETS_STORAGE_KEY = 'poe2tb_saved_stat_presets';
 
-    // ── 1) 词典与权重格式化 ───────────────────────────────────────────
-    const dict = window.PoE2TWDict || globalThis.PoE2TWDict || {};
-    const twStats = dict.twStats || { result: [] };
-    const allocates = dict.allocates || [];
-    const weightSum = dict.weightSum || {};
-
-    const txTradeFormatstats = [];
-    twStats.result.forEach((item) => {
-        const newEntries = [];
-        (item.entries || [])
-            .filter((a) => a.text.indexOf('遗产') < 0)
-            .forEach((e) => {
-                if (e.allocates) {
-                    e.option = {
-                        options: JSON.parse(JSON.stringify(allocates))
-                    };
-                }
-                if (e.option && e.option.options && e.text.indexOf('#') > -1) {
-                    e.option.options
-                        .filter((a) => a.text.indexOf('遗产') < 0)
-                        .forEach((o) => {
-                            const texts = o.text.split('\n');
-                            texts.forEach((t) => {
-                                newEntries.push({
-                                    id: e.id,
-                                    option: o.id,
-                                    text: e.text
-                                        .replace('#', t)
-                                        .replace(/\[[^|\]]*\||[\][]/g, ''),
-                                });
-                            });
-                        });
-                } else {
-                    newEntries.push({
-                        id: e.id,
-                        text: e.text.replace(/\[[^|\]]*\||[\][]/g, ''),
-                    });
-                }
-            });
-        txTradeFormatstats.push({
-            id: item.id,
-            label: item.label,
-            entries: newEntries,
-        });
-    });
+    // ── 1) 内置综合权重配置（解耦巨型字典，零依赖运行）─────────────────
+    const BUILTIN_WEIGHTS = {
+        '综合点伤权重': [
+            { id: 'explicit.stat_1940865751', text: '附加#至#物理伤害', weight: 1 },
+            { id: 'explicit.stat_3336890334', text: '附加#至#闪电伤害', weight: 1 },
+            { id: 'explicit.stat_3032590688', text: '攻击附加#至#物理伤害', weight: 1 },
+            { id: 'explicit.stat_1037193709', text: '附加#至#冰冷伤害', weight: 1 },
+            { id: 'explicit.stat_709508406', text: '附加#至#火焰伤害', weight: 1 },
+            { id: 'explicit.stat_1754445556', text: '攻击附加#至#闪电伤害', weight: 1 },
+            { id: 'explicit.stat_1573130764', text: '攻击附加#至#火焰伤害', weight: 1 },
+            { id: 'explicit.stat_4067062424', text: '攻击附加#至#冰冷伤害', weight: 1 }
+        ],
+        '综合攻击爆伤权重': [
+            { id: 'explicit.stat_2694482655', text: '#%的暴击伤害加成', weight: 1 },
+            { id: 'explicit.stat_3556824919', text: '增加#%暴击伤害加成', weight: 1 },
+            { id: 'explicit.stat_3714003708', text: '增加#%攻击伤害的暴击伤害加成', weight: 1 }
+        ]
+    };
 
     // ── 1.1) Vue 实例与 Store 稳健获取 ─────────────────────────────────
     function getVueApp() {
@@ -103,21 +76,25 @@
         const norm = (s) => s.replace(/[\d\.]+/g, '#').replace(/[\s\+]/g, '').toLowerCase();
         const cleanNorm = norm(clean);
 
-        for (const cat of txTradeFormatstats) {
-            for (const entry of (cat.entries || [])) {
-                if (!entry.id || !entry.text) continue;
-                const entryNorm = norm(entry.text);
-                if (entryNorm === cleanNorm) {
-                    return entry.id;
+        const app = getVueApp();
+        const storeStats = (app && app.$store && app.$store.state && app.$store.state.stats) || [];
+        if (Array.isArray(storeStats)) {
+            for (const cat of storeStats) {
+                for (const entry of (cat.entries || [])) {
+                    if (!entry.id || !entry.text) continue;
+                    const entryNorm = norm(entry.text);
+                    if (entryNorm === cleanNorm) {
+                        return entry.id;
+                    }
                 }
             }
-        }
-        for (const cat of txTradeFormatstats) {
-            for (const entry of (cat.entries || [])) {
-                if (!entry.id || !entry.text) continue;
-                const entryNorm = norm(entry.text);
-                if (cleanNorm.includes(entryNorm) || entryNorm.includes(cleanNorm)) {
-                    return entry.id;
+            for (const cat of storeStats) {
+                for (const entry of (cat.entries || [])) {
+                    if (!entry.id || !entry.text) continue;
+                    const entryNorm = norm(entry.text);
+                    if (entryNorm.length >= 4 && (cleanNorm.includes(entryNorm) || entryNorm.includes(cleanNorm))) {
+                        return entry.id;
+                    }
                 }
             }
         }
@@ -309,6 +286,7 @@
     function setSavedPresets(presets) {
         try {
             localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(presets));
+            window.postMessage({ __poe2tb_presets_updated: true }, '*');
         } catch (e) {}
     }
 
@@ -418,121 +396,7 @@
         });
     }
 
-    // ── 4) 下拉框与输入框初始化 ───────────────────────────────────────
-    function initSlectMy() {
-        const targetSelect = document.querySelector('.multiselect.filter-select.filter-group-select');
-        if (!targetSelect) return;
-        const statsDiv = targetSelect.closest('span')?.closest('div');
-        if (!statsDiv || statsDiv.querySelector('.poe2tb-preset-input-container')) return;
-
-        const inputBox = document.createElement('input');
-        inputBox.type = 'text';
-        inputBox.className = 'multiselect';
-        inputBox.placeholder = '已保存的预设配置...';
-        inputBox.style.width = '50%';
-        inputBox.style.background = '#1e2124';
-        inputBox.style.textAlign = 'center';
-        inputBox.style.marginLeft = '50%';
-        inputBox.style.marginTop = '12px';
-        inputBox.style.color = 'white';
-        inputBox.style.padding = '6px';
-        inputBox.style.border = '1px solid #2c2c38';
-        inputBox.style.borderRadius = '4px';
-
-        const dropdown = document.createElement('div');
-        dropdown.className = 'dropdown';
-        dropdown.style.display = 'none';
-        dropdown.style.backgroundColor = '#1e2124';
-        dropdown.style.border = '1px solid #3a3a4c';
-        dropdown.style.borderRadius = '4px';
-        dropdown.style.maxHeight = '180px';
-        dropdown.style.overflowY = 'auto';
-        dropdown.style.width = '50%';
-        dropdown.style.marginLeft = '50%';
-        dropdown.style.zIndex = '1000';
-
-        function populateDropdown(filter = '') {
-            dropdown.innerHTML = '';
-            const presets = getSavedPresets();
-            if (!presets.length) {
-                const empty = document.createElement('div');
-                empty.textContent = '暂无保存的预设';
-                empty.style.padding = '8px 12px';
-                empty.style.color = '#7a7670';
-                empty.style.fontSize = '12px';
-                empty.style.textAlign = 'center';
-                dropdown.appendChild(empty);
-                return;
-            }
-
-            presets.forEach(option => {
-                if (!filter || (option.name && option.name.toLowerCase().includes(filter.toLowerCase()))) {
-                    const item = document.createElement('div');
-                    item.style.padding = '8px 12px';
-                    item.style.cursor = 'pointer';
-                    item.style.color = 'white';
-                    item.style.fontSize = '13px';
-                    item.style.display = 'flex';
-                    item.style.justifyContent = 'space-between';
-                    item.style.alignItems = 'center';
-                    item.style.borderBottom = '1px solid #2a2d32';
-
-                    const nameSpan = document.createElement('span');
-                    nameSpan.textContent = option.name;
-                    item.appendChild(nameSpan);
-
-                    item.addEventListener('click', () => {
-                        const app = getVueApp();
-                        if (app && app.$store) {
-                            app.$store.commit("pushStatGroup", JSON.parse(JSON.stringify(option.query)));
-                        }
-                        setTimeout(() => { dropdown.style.display = 'none'; }, 100);
-                    });
-
-                    const deleteButton = document.createElement('button');
-                    deleteButton.textContent = '×';
-                    deleteButton.style.background = 'none';
-                    deleteButton.style.border = 'none';
-                    deleteButton.style.color = '#ff6b6b';
-                    deleteButton.style.cursor = 'pointer';
-                    deleteButton.style.fontSize = '16px';
-                    deleteButton.title = '删除此预设';
-                    deleteButton.addEventListener('click', (event) => {
-                        event.stopPropagation();
-                        const nextPresets = getSavedPresets().filter(a => a.name !== option.name);
-                        setSavedPresets(nextPresets);
-                        populateDropdown(inputBox.value);
-                    });
-
-                    item.appendChild(deleteButton);
-                    dropdown.appendChild(item);
-                }
-            });
-        }
-
-        populateDropdown();
-
-        inputBox.addEventListener('input', () => {
-            populateDropdown(inputBox.value);
-            dropdown.style.display = 'block';
-        });
-
-        document.addEventListener('click', (event) => {
-            if (!dropdown.contains(event.target) && event.target !== inputBox) {
-                dropdown.style.display = 'none';
-            } else if (event.target === inputBox) {
-                populateDropdown(inputBox.value);
-                dropdown.style.display = 'block';
-            }
-        });
-
-        const container = document.createElement('div');
-        container.className = 'multiselect filter-select filter-group-select poe2tb-preset-input-container';
-        container.appendChild(inputBox);
-        container.appendChild(dropdown);
-        statsDiv.appendChild(container);
-    }
-
+    // ── 4) 下拉框初始化与联动 ─────────────────────────────────────────
     function formatTypeLabel(type) {
         const map = {
             count: '计数',
@@ -573,7 +437,7 @@
             selectBox.appendChild(group);
         }
 
-        const builtinKeys = Object.keys(weightSum);
+        const builtinKeys = Object.keys(BUILTIN_WEIGHTS);
         if (builtinKeys.length > 0) {
             const group = document.createElement('optgroup');
             group.label = '── 内置综合权重 ──';
@@ -607,27 +471,19 @@
             }
         } else if (val.startsWith('builtin:')) {
             const key = val.replace('builtin:', '');
-            const weights = weightSum[key];
-            if (weights) {
+            const items = BUILTIN_WEIGHTS[key];
+            if (items) {
                 const newStat = {
                     type: 'weight',
                     value: { min: 1 },
-                    filters: [],
+                    filters: items.map(item => ({
+                        id: item.id,
+                        text: item.text,
+                        value: { weight: item.weight },
+                        disabled: false
+                    })),
                     disabled: false
                 };
-
-                txTradeFormatstats.forEach(a => {
-                    a.entries.forEach(e => {
-                        const findW = weights.find(w => w.id == e.id.split('.')[1]);
-                        if (findW) {
-                            newStat.filters.push({
-                                id: e.id,
-                                value: { weight: findW.value },
-                                disabled: false
-                            });
-                        }
-                    });
-                });
                 app.$store.commit('pushStatGroup', newStat);
             }
         }
@@ -638,14 +494,10 @@
         document.querySelectorAll('.poe2tb-weight-select').forEach(sel => {
             populateWeightSelect(sel);
         });
-        const inp = document.querySelector('.poe2tb-preset-input-container input');
-        if (inp) {
-            inp.dispatchEvent(new Event('input'));
-        }
     }
 
     function initSumSelect() {
-        const initInterval = setInterval(() => {
+        setInterval(() => {
             const targetSelect = document.querySelector('.multiselect.filter-select.filter-group-select');
             if (!targetSelect) return;
             initModel();
@@ -667,9 +519,6 @@
                 selectBox.addEventListener('change', (e) => handleWeightSelectChange(e, selectBox));
                 statsDiv.appendChild(selectBox);
             }
-
-            initSlectMy();
-            clearInterval(initInterval);
         }, 1000);
     }
 
@@ -737,11 +586,15 @@
             const stats = getCurrentStats();
 
             const statTextMap = {};
-            txTradeFormatstats.forEach(a => {
-                (a.entries || []).forEach(entry => {
-                    if (entry.id && entry.text) statTextMap[entry.id] = entry.text;
+            const app = getVueApp();
+            const storeStats = (app && app.$store && app.$store.state && app.$store.state.stats) || [];
+            if (Array.isArray(storeStats)) {
+                storeStats.forEach(a => {
+                    (a.entries || []).forEach(entry => {
+                        if (entry.id && entry.text) statTextMap[entry.id] = entry.text;
+                    });
                 });
-            });
+            }
 
             // 若提取到的 filter 条目自带 text，补充进入 statTextMap
             stats.forEach(g => {
