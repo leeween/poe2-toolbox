@@ -17,7 +17,8 @@
                  data-kind="item" draggable="true">
                 <div class="tb-fav-main"><div class="tb-fav-title">${escapeHtml(item.name)}</div></div>
                 <div class="tb-fav-actions">
-                    ${inFolder ? '<button class="tb-fav-move" title="移动到根目录">📤</button>' : ''}
+                    <button class="tb-fav-export" title="导出此收藏">📤</button>
+                    ${inFolder ? '<button class="tb-fav-move" title="移动到根目录">⤴</button>' : ''}
                     <button class="tb-fav-del" title="删除收藏">🗑️</button>
                 </div>
             </div>`;
@@ -161,7 +162,7 @@
         ctx.ui.toast(`导出成功！压缩率 ${resp.data.compressionRatio}%`, 'success');
     }
 
-    function showExportDialog(folderName, compressed) {
+    function showExportDialog(folderName, compressed, note) {
         document.querySelector('.tb-dialog-overlay')?.remove();
         const overlay = document.createElement('div');
         overlay.className = 'tb-dialog-overlay';
@@ -170,6 +171,7 @@
                 <div class="tb-dialog-header"><h3></h3></div>
                 <div class="tb-dialog-body">
                     <label class="tb-dialog-label">导入代码（点击可全选）:</label>
+                    ${note ? `<div style="margin-bottom:6px;color:var(--tb-text-dim);font-size:12px;line-height:1.5;">${escapeHtml(note)}</div>` : ''}
                     <textarea readonly class="tb-export-text" style="height:120px;font-family:monospace;font-size:11px;"></textarea>
                 </div>
                 <div class="tb-dialog-footer">
@@ -191,6 +193,18 @@
             ctx.ui.toast('导入代码已复制到剪贴板！', 'success');
         });
         setTimeout(() => ta.select(), 50);
+    }
+
+    // 单条收藏导出：导入侧只认 poe2-trading-folder，所以后台把它包成同名文件夹导出，
+    // 这样不用改导入协议，对方用旧版插件也能导入（导入后会得到一个含该条的文件夹）。
+    async function exportItem(id) {
+        const resp = await ctx.sendBg({ type: 'EXPORT_ITEM', id });
+        if (!resp || !resp.success) {
+            ctx.ui.toast('导出失败：' + ((resp && resp.error) || '未知错误'), 'error');
+            return;
+        }
+        showExportDialog(resp.data.folderName, resp.data.compressed,
+            '该收藏以文件夹形态导出，对方导入后会得到一个同名文件夹。');
     }
 
     function showImportDialog() {
@@ -258,6 +272,8 @@
             if (addBtn) { e.stopPropagation(); addCurrentSearchToFolder(addBtn.dataset.folderId); return; }
             const moveBtn = t.closest('.tb-fav-move');
             if (moveBtn) { e.stopPropagation(); moveToRoot(moveBtn.closest('.tb-fav-item').dataset.id); return; }
+            const favExportBtn = t.closest('.tb-fav-export');
+            if (favExportBtn) { e.stopPropagation(); exportItem(favExportBtn.closest('.tb-fav-item').dataset.id); return; }
             const delFavBtn = t.closest('.tb-fav-del');
             if (delFavBtn) { e.stopPropagation(); deleteFavorite(delFavBtn.closest('.tb-fav-item').dataset.id); return; }
             const main = t.closest('.tb-fav-main');

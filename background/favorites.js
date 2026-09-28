@@ -172,19 +172,18 @@ async function reorderFavorites(payload, version) {
     await chrome.storage.local.set({ [k]: newRoot });
 }
 
-async function exportFolder(folderId, version) {
-    const { list } = await getFavoritesRaw(version);
-    const folder = list.find((i) => i.id === folderId && i.type === 'folder');
-    if (!folder) throw new Error('文件夹不存在');
+// 导出码统一封装：导入侧只认 poe2-trading-folder，所以单条收藏也按「同名文件夹」打包，
+// 不新增协议类型，老版本插件同样能导入（导入后会得到一个含该条的文件夹）。
+function packFolderExport(name, items) {
     const exportData = {
         version: '1.0.0',
         type: 'poe2-trading-folder',
         timestamp: Date.now(),
         folder: {
-            name: folder.name,
-            items: folder.items || [],
+            name,
+            items,
             exportedAt: new Date().toISOString(),
-            totalItems: (folder.items || []).length,
+            totalItems: items.length,
         },
     };
     const json = JSON.stringify(exportData);
@@ -194,9 +193,31 @@ async function exportFolder(folderId, version) {
         originalSize: json.length,
         compressedSize: compressed.length,
         compressionRatio: ((1 - compressed.length / json.length) * 100).toFixed(1),
-        folderName: folder.name,
-        itemCount: (folder.items || []).length,
+        folderName: name,
+        itemCount: items.length,
     };
+}
+
+async function exportFolder(folderId, version) {
+    const { list } = await getFavoritesRaw(version);
+    const folder = list.find((i) => i.id === folderId && i.type === 'folder');
+    if (!folder) throw new Error('文件夹不存在');
+    return packFolderExport(folder.name, folder.items || []);
+}
+
+// 单条收藏导出：根级收藏此前只能删除、无法导出，这里按同名文件夹打包复用导入格式
+async function exportItem(favoriteId, version) {
+    const { list } = await getFavoritesRaw(version);
+    let found = list.find((i) => i.id === favoriteId && i.type !== 'folder');
+    if (!found) {
+        for (const item of list) {
+            if (item.type !== 'folder' || !Array.isArray(item.items)) continue;
+            found = item.items.find((i) => i.id === favoriteId);
+            if (found) break;
+        }
+    }
+    if (!found) throw new Error('收藏项不存在');
+    return packFolderExport(found.name || '收藏', [{ ...found }]);
 }
 
 async function importFolder(importData, version) {
@@ -259,4 +280,5 @@ TB.on('RENAME_FOLDER', async (req) => { await renameFolder(req.id, req.newName, 
 TB.on('MOVE_TO_ROOT', async (req) => { await moveToRoot(req.favoriteId, req.version); });
 TB.on('REORDER_FAVORITES', async (req) => { await reorderFavorites(req.payload, req.version); });
 TB.on('EXPORT_FOLDER', async (req) => ({ data: await exportFolder(req.folderId, req.version) }));
+TB.on('EXPORT_ITEM', async (req) => ({ data: await exportItem(req.id, req.version) }));
 TB.on('IMPORT_FOLDER', async (req) => ({ data: await importFolder(req.importData, req.version) }));
